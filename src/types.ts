@@ -13,6 +13,10 @@ export interface Settings {
   zelleHandle: string;
   /** Stripe Payment Link for ACH bank transfers, e.g. https://buy.stripe.com/XXXX. */
   stripePaymentUrl: string;
+  /** Relay ACH routing & account details shown to customers for $0-fee bank transfers. */
+  relayBankName: string;
+  relayRoutingNumber: string;
+  relayAccountNumber: string;
   googleReviewUrl: string;
   yelpReviewUrl: string;
   facebookReviewUrl: string;
@@ -26,7 +30,18 @@ export interface Review { id: string; invoiceId: string; rating: number; text: s
 export interface PaymentClaim { method: string; claimedAt: number; }
 
 /** A transaction imported from a Relay (or other bank) CSV export. */
-export interface BankTx { id: string; date: string; description: string; amount: number; account: string; matchedInvoiceId?: string; }
+export interface BankTx {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  account: string;
+  category?: string;
+  txType?: string;
+  reference?: string;
+  status?: string;
+  matchedInvoiceId?: string;
+}
 export interface Invoice { id: string; number: string; workOrderNo: string; status: InvoiceStatus; clientName: string; contact: string; boatType: string; makeModel: string; hullId: string; repairDescription: string; issueDate: string; dueDate: string; paymentMethod: string; markupPct: number; taxRate: number; notes: string; createdAt: number; updatedAt: number; }
 export interface LineItem { id: string; invoiceId: string; type: LineType; description: string; catalogItemId?: string; qty: number; unit: string; unitPrice: number; taxable: boolean; sortOrder: number; }
 export interface Totals { labor: number; parts: number; markup: number; taxableBase: number; tax: number; total: number; }

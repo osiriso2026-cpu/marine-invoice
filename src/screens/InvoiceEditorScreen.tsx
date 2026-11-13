@@ -30,7 +30,7 @@ const STATUSES: { key: InvoiceStatus; label: string }[] = [
   { key: 'sent', label: 'Sent' },
   { key: 'paid', label: 'Paid' },
 ];
-const PAYMENT_METHODS = ['Cash', 'Check', 'Card', 'Bank transfer'];
+const PAYMENT_METHODS = ['Zelle', 'Relay ACH', 'Cash', 'Check', 'Card', 'Bank transfer'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function uid(prefix: string): string {

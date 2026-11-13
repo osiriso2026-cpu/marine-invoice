@@ -68,6 +68,8 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
   const claim = inv ? store.paymentClaims[inv.id] : undefined;
 
   const [copiedMemo, setCopiedMemo] = useState(false);
+  const [copiedRouting, setCopiedRouting] = useState(false);
+  const [copiedAcct, setCopiedAcct] = useState(false);
   const [rating, setRating] = useState(existingReview?.rating ?? 5);
   const [reviewText, setReviewText] = useState(existingReview?.text ?? '');
   const [reviewSubmitted, setReviewSubmitted] = useState(!!existingReview);
@@ -135,8 +137,26 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
     }
   };
 
+  const onCopyRouting = async () => {
+    if (await copyText(settings.relayRoutingNumber.trim())) {
+      setCopiedRouting(true);
+      setTimeout(() => setCopiedRouting(false), 3000);
+    }
+  };
+
+  const onCopyAccount = async () => {
+    if (await copyText(settings.relayAccountNumber.trim())) {
+      setCopiedAcct(true);
+      setTimeout(() => setCopiedAcct(false), 3000);
+    }
+  };
+
   const onZelleSent = () => {
     void store.claimPayment(inv.id, 'Zelle');
+  };
+
+  const onRelayAchSent = () => {
+    void store.claimPayment(inv.id, 'Relay ACH / Wire');
   };
 
   const onStripe = () => {
@@ -311,9 +331,44 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
               </View>
             ) : null}
 
+            {settings.relayRoutingNumber.trim() && settings.relayAccountNumber.trim() ? (
+              <View style={{ marginTop: tokens.space[3], padding: tokens.space[3], borderWidth: 1, borderColor: c.line, borderRadius: tokens.radius.control, gap: tokens.space[2] }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={[s.body, { fontWeight: tokens.fontWeight.bold }]}>Direct Relay ACH / Wire ($0 fee)</Text>
+                  <Text style={{ color: c.success, fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.bold }}>COMMERCIAL & FLEETS</Text>
+                </View>
+                <Text style={s.muted}>
+                  Send <Text style={{ fontWeight: tokens.fontWeight.bold, color: c.ink }}>{money(totals.total)}</Text> via ACH or wire to{' '}
+                  <Text style={{ fontWeight: tokens.fontWeight.bold, color: c.ink }}>{settings.businessName || 'Mobile Marine Doc'}</Text>
+                  {settings.relayBankName.trim() ? ` (${settings.relayBankName.trim()})` : ''}:
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space[2] }}>
+                  <Button
+                    variant="secondary"
+                    icon={copiedRouting ? 'check' : 'copy'}
+                    label={copiedRouting ? 'Routing copied!' : `Routing: ${settings.relayRoutingNumber.trim()}`}
+                    onPress={() => void onCopyRouting()}
+                  />
+                  <Button
+                    variant="secondary"
+                    icon={copiedAcct ? 'check' : 'copy'}
+                    label={copiedAcct ? 'Account copied!' : `Account: ${settings.relayAccountNumber.trim()}`}
+                    onPress={() => void onCopyAccount()}
+                  />
+                  <Button
+                    variant="secondary"
+                    icon={copiedMemo ? 'check' : 'copy'}
+                    label={copiedMemo ? 'Memo copied!' : `Memo: ${inv.number}`}
+                    onPress={() => void onCopyMemo()}
+                  />
+                </View>
+                <Button icon="send" label="I sent my ACH / wire transfer" onPress={onRelayAchSent} />
+              </View>
+            ) : null}
+
             {stripeUrl ? (
               <View style={{ marginTop: tokens.space[3], padding: tokens.space[3], borderWidth: 1, borderColor: c.line, borderRadius: tokens.radius.control, gap: tokens.space[2] }}>
-                <Text style={[s.body, { fontWeight: tokens.fontWeight.bold }]}>Option 2 · Bank transfer (ACH)</Text>
+                <Text style={[s.body, { fontWeight: tokens.fontWeight.bold }]}>Online Bank Checkout (Stripe ACH)</Text>
                 <Text style={s.muted}>Best for larger fiberglass and refit jobs. Secure checkout via Stripe.</Text>
                 <Button variant="secondary" icon="external-link" label="Pay via bank ACH" onPress={onStripe} />
               </View>

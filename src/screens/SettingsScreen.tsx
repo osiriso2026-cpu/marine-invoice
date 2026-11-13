@@ -30,6 +30,9 @@ type FormState = {
   portalBaseUrl: string;
   zelleHandle: string;
   stripePaymentUrl: string;
+  relayBankName: string;
+  relayRoutingNumber: string;
+  relayAccountNumber: string;
   googleReviewUrl: string;
   yelpReviewUrl: string;
   facebookReviewUrl: string;
@@ -59,6 +62,9 @@ function toForm(s: Settings): FormState {
     portalBaseUrl: s.portalBaseUrl ?? '',
     zelleHandle: s.zelleHandle ?? '',
     stripePaymentUrl: s.stripePaymentUrl ?? '',
+    relayBankName: s.relayBankName ?? '',
+    relayRoutingNumber: s.relayRoutingNumber ?? '',
+    relayAccountNumber: s.relayAccountNumber ?? '',
     googleReviewUrl: s.googleReviewUrl ?? '',
     yelpReviewUrl: s.yelpReviewUrl ?? '',
     facebookReviewUrl: s.facebookReviewUrl ?? '',
@@ -177,6 +183,9 @@ export default function SettingsScreen(): JSX.Element {
       portalBaseUrl: form.portalBaseUrl.trim().replace(/\/+$/, ''),
       zelleHandle: form.zelleHandle.trim(),
       stripePaymentUrl: form.stripePaymentUrl.trim(),
+      relayBankName: form.relayBankName.trim(),
+      relayRoutingNumber: form.relayRoutingNumber.trim(),
+      relayAccountNumber: form.relayAccountNumber.trim(),
       googleReviewUrl: form.googleReviewUrl.trim(),
       yelpReviewUrl: form.yelpReviewUrl.trim(),
       facebookReviewUrl: form.facebookReviewUrl.trim(),
@@ -382,6 +391,27 @@ export default function SettingsScreen(): JSX.Element {
               autoCapitalize: 'none',
               helper: 'Create one free at stripe.com → Payment Links. Leave blank to hide this option.',
             })}
+            {renderField('relayBankName', 'Relay bank name (for ACH / wires)', {
+              placeholder: 'Relay Financial (Thread Bank)',
+              autoCapitalize: 'words',
+            })}
+            <View style={s.row}>
+              <View style={s.half}>
+                {renderField('relayRoutingNumber', 'Relay ACH routing #', {
+                  placeholder: '064209588',
+                  keyboardType: 'decimal-pad',
+                  autoCapitalize: 'none',
+                  helper: 'Shown on customer portal & PDF when both routing & account are filled.',
+                })}
+              </View>
+              <View style={s.half}>
+                {renderField('relayAccountNumber', 'Relay account #', {
+                  placeholder: 'Checking account #',
+                  keyboardType: 'decimal-pad',
+                  autoCapitalize: 'none',
+                })}
+              </View>
+            </View>
           </View>
 
           <View style={base.card}>

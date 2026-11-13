@@ -5,7 +5,16 @@ import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useStore } from '../store';
 import { money } from '../calc';
-import { availableBankYears, buildAccountingCsv, monthLabel, monthlySummaries, parseBankCsv, suggestMatches } from '../bank';
+import {
+  accountSummaries,
+  availableBankAccounts,
+  availableBankYears,
+  buildAccountingCsv,
+  monthLabel,
+  monthlySummaries,
+  parseBankCsv,
+  suggestMatches,
+} from '../bank';
 import { makeStyles, tokens, useColors } from '../theme';
 import { Button, EmptyState } from '../ui';
 import type { BankTx } from '../types';
@@ -28,22 +37,36 @@ export default function BankingScreen(): JSX.Element {
   const [importError, setImportError] = useState<string | null>(null);
   const [showAllTx, setShowAllTx] = useState(false);
   const [exportYear, setExportYear] = useState<string>('all');
+  const [accountFilter, setAccountFilter] = useState<string>('all');
+  const [linkingTxId, setLinkingTxId] = useState<string | null>(null);
 
   const { bankTxs } = store;
+  const openInvoices = useMemo(
+    () => store.data.invoices.filter((i) => i.status !== 'paid'),
+    [store.data.invoices],
+  );
   const invoiceByNumber = useMemo(() => {
     const m = new Map<string, string>();
     for (const inv of store.data.invoices) m.set(inv.id, inv.number);
     return m;
   }, [store.data.invoices]);
 
-  const suggestions = useMemo(
-    () => suggestMatches(bankTxs, store.data.invoices, store.data.lines),
-    [bankTxs, store.data.invoices, store.data.lines],
+  const accounts = useMemo(() => availableBankAccounts(bankTxs), [bankTxs]);
+  const acctSummaries = useMemo(() => accountSummaries(bankTxs), [bankTxs]);
+  const activeAccount = accountFilter !== 'all' && accounts.includes(accountFilter) ? accountFilter : undefined;
+  const filteredTxs = useMemo(
+    () => (activeAccount ? bankTxs.filter((t) => t.account.trim() === activeAccount) : bankTxs),
+    [bankTxs, activeAccount],
   );
-  const months = useMemo(() => monthlySummaries(bankTxs), [bankTxs]);
-  const years = useMemo(() => availableBankYears(bankTxs), [bankTxs]);
+
+  const suggestions = useMemo(
+    () => suggestMatches(filteredTxs, store.data.invoices, store.data.lines),
+    [filteredTxs, store.data.invoices, store.data.lines],
+  );
+  const months = useMemo(() => monthlySummaries(filteredTxs), [filteredTxs]);
+  const years = useMemo(() => availableBankYears(filteredTxs), [filteredTxs]);
   const activeYear = exportYear !== 'all' && years.includes(exportYear) ? exportYear : undefined;
-  const txsShown = showAllTx ? bankTxs : bankTxs.slice(0, RECENT_LIMIT);
+  const txsShown = showAllTx ? filteredTxs : filteredTxs.slice(0, RECENT_LIMIT);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -98,12 +121,14 @@ export default function BankingScreen(): JSX.Element {
   };
 
   const exportAccounting = async () => {
-    const csv = buildAccountingCsv(bankTxs, store.data.invoices, activeYear);
-    const label = activeYear ?? 'all-years';
-    const filename = `mobile-marine-doc-banking-${label}.csv`;
+    const csv = buildAccountingCsv(filteredTxs, store.data.invoices, activeYear, activeAccount);
+    const label = [activeAccount ? activeAccount.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '', activeYear ?? 'all-years']
+      .filter(Boolean)
+      .join('-');
+    const filename = `mobile-marine-doc-relay-${label}.csv`;
     const rowCount = activeYear
-      ? bankTxs.filter((t) => t.date.startsWith(`${activeYear}-`)).length
-      : bankTxs.length;
+      ? filteredTxs.filter((t) => t.date.startsWith(`${activeYear}-`)).length
+      : filteredTxs.length;
 
     const g = globalThis as {
       document?: { createElement(tag: string): any; body: { appendChild(n: unknown): void } };
@@ -196,6 +221,58 @@ export default function BankingScreen(): JSX.Element {
           ) : null}
         </View>
 
+        {/* Relay Accounts Overview */}
+        {acctSummaries.length > 0 ? (
+          <View style={s.card}>
+            <Text style={sectionTitle} accessibilityRole="header">
+              Relay accounts
+            </Text>
+            <Text style={[s.muted, { marginTop: tokens.space[1] }]}>
+              Cash flow across your Relay checking & reserve accounts.
+            </Text>
+            {accounts.length > 1 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space[2], marginTop: tokens.space[2] }}>
+                {['all', ...accounts].map((acc) => {
+                  const active = (activeAccount ?? 'all') === acc;
+                  return (
+                    <Pressable
+                      key={acc}
+                      accessibilityRole="button"
+                      accessibilityLabel={acc === 'all' ? 'All Relay accounts' : `Filter by ${acc}`}
+                      accessibilityState={{ selected: active }}
+                      onPress={() => setAccountFilter(acc)}
+                      style={({ pressed }) => [s.chip, active && s.chipActive, pressed && s.btnPressed]}
+                    >
+                      <Text style={[s.btnText, { fontSize: tokens.fontSize.sm }, active && s.btnTextOnAccent]}>
+                        {acc === 'all' ? 'All accounts' : acc}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+            <View style={{ marginTop: tokens.space[2] }}>
+              {acctSummaries.map((ac) => (
+                <View
+                  key={ac.account}
+                  style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: tokens.space[2], borderTopWidth: 1, borderTopColor: c.line }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.body, { fontWeight: tokens.fontWeight.medium }]}>{ac.account}</Text>
+                    <Text style={[s.muted, { fontSize: tokens.fontSize.xs }]}>
+                      {ac.count} tx · In +{money(ac.moneyIn)} · Out -{money(ac.moneyOut)}
+                    </Text>
+                  </View>
+                  <Text style={[s.money, { color: ac.net >= 0 ? c.success : c.danger }]}>
+                    {ac.net >= 0 ? '+' : ''}
+                    {money(ac.net)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         {/* Suggested matches */}
         {suggestions.length > 0 ? (
           <View style={[s.card, { borderColor: c.accent, borderWidth: 2 }]}>
@@ -217,7 +294,11 @@ export default function BankingScreen(): JSX.Element {
                     </Text>
                     <Text style={[s.muted, { fontSize: tokens.fontSize.xs }]}>
                       Deposit {shortDate(m.tx.date)}
-                      {m.reason === 'number' ? ' · invoice # found in memo' : ' · amount matches exactly'}
+                      {m.reason === 'number'
+                        ? ' · invoice # found in memo'
+                        : m.reason === 'client'
+                          ? ' · client name + amount match'
+                          : ' · amount matches exactly'}
                     </Text>
                   </View>
                   <Text style={[s.money, { color: c.success }]}>+{money(m.tx.amount)}</Text>
@@ -315,51 +396,93 @@ export default function BankingScreen(): JSX.Element {
               <Text style={sectionTitle} accessibilityRole="header">
                 Transactions
               </Text>
-              <Text style={s.muted}>{bankTxs.length} total</Text>
+              <Text style={s.muted}>{filteredTxs.length} total</Text>
             </View>
             {txsShown.map((t) => {
               const matchedNumber = t.matchedInvoiceId ? invoiceByNumber.get(t.matchedInvoiceId) : undefined;
+              const isPicking = linkingTxId === t.id;
               return (
                 <View
                   key={t.id}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[3], paddingVertical: tokens.space[2], borderTopWidth: 1, borderTopColor: c.line }}
+                  style={{ paddingVertical: tokens.space[2], borderTopWidth: 1, borderTopColor: c.line }}
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.body} numberOfLines={1}>
-                      {t.description || '(no description)'}
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2] }}>
-                      <Text style={[s.muted, { fontSize: tokens.fontSize.xs }]}>
-                        {shortDate(t.date)}
-                        {t.account ? ` · ${t.account}` : ''}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[3] }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.body} numberOfLines={1}>
+                        {t.description || '(no description)'}
                       </Text>
-                      {matchedNumber ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: tokens.space[2] }}>
+                        <Text style={[s.muted, { fontSize: tokens.fontSize.xs }]}>
+                          {[shortDate(t.date), t.account, t.txType, t.category].filter(Boolean).join(' · ')}
+                        </Text>
+                        {matchedNumber ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Unlink ${matchedNumber} from this deposit`}
+                            onPress={() => void unlink(t)}
+                            hitSlop={{ top: 6, bottom: 6 }}
+                            style={{ backgroundColor: c.accentSoft, borderRadius: tokens.radius.chip, paddingHorizontal: tokens.space[2], paddingVertical: 2 }}
+                          >
+                            <Text style={{ color: c.accent, fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.medium }}>
+                              {matchedNumber} ✕
+                            </Text>
+                          </Pressable>
+                        ) : t.amount > 0 && openInvoices.length > 0 ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Link deposit to an invoice"
+                            onPress={() => setLinkingTxId(isPicking ? null : t.id)}
+                            hitSlop={{ top: 6, bottom: 6 }}
+                            style={{ borderWidth: 1, borderColor: c.line, borderRadius: tokens.radius.chip, paddingHorizontal: tokens.space[2], paddingVertical: 2 }}
+                          >
+                            <Text style={{ color: c.inkMuted, fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.medium }}>
+                              {isPicking ? 'Cancel' : '+ Link invoice'}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    </View>
+                    <Text style={[s.money, { color: t.amount >= 0 ? c.success : c.ink }]}>
+                      {t.amount >= 0 ? '+' : ''}
+                      {money(t.amount)}
+                    </Text>
+                  </View>
+                  {isPicking ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space[2], marginTop: tokens.space[2] }}>
+                      {openInvoices.map((inv) => (
                         <Pressable
+                          key={inv.id}
                           accessibilityRole="button"
-                          accessibilityLabel={`Unlink ${matchedNumber} from this deposit`}
-                          onPress={() => void unlink(t)}
-                          hitSlop={{ top: 6, bottom: 6 }}
-                          style={{ backgroundColor: c.accentSoft, borderRadius: tokens.radius.chip, paddingHorizontal: tokens.space[2], paddingVertical: 2 }}
+                          accessibilityLabel={`Link to ${inv.number} ${inv.clientName}`}
+                          onPress={() => {
+                            setLinkingTxId(null);
+                            void acceptMatch(t.id, inv.id, inv.number);
+                          }}
+                          style={({ pressed }) => [
+                            {
+                              backgroundColor: c.accentSoft,
+                              borderRadius: tokens.radius.control,
+                              paddingHorizontal: tokens.space[3],
+                              paddingVertical: tokens.space[2],
+                            },
+                            pressed && s.btnPressed,
+                          ]}
                         >
-                          <Text style={{ color: c.accent, fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.medium }}>
-                            {matchedNumber} ✕
+                          <Text style={{ color: c.accent, fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.bold }}>
+                            {inv.number}{inv.clientName ? ` · ${inv.clientName}` : ''}
                           </Text>
                         </Pressable>
-                      ) : null}
+                      ))}
                     </View>
-                  </View>
-                  <Text style={[s.money, { color: t.amount >= 0 ? c.success : c.ink }]}>
-                    {t.amount >= 0 ? '+' : ''}
-                    {money(t.amount)}
-                  </Text>
+                  ) : null}
                 </View>
               );
             })}
-            {bankTxs.length > RECENT_LIMIT ? (
+            {filteredTxs.length > RECENT_LIMIT ? (
               <View style={{ marginTop: tokens.space[2] }}>
                 <Button
                   variant="tertiary"
-                  label={showAllTx ? 'Show recent only' : `Show all ${bankTxs.length}`}
+                  label={showAllTx ? 'Show recent only' : `Show all ${filteredTxs.length}`}
                   onPress={() => setShowAllTx((v) => !v)}
                 />
               </View>

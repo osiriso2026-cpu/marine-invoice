@@ -80,8 +80,8 @@ function isoDate(raw: string): string | null {
 }
 
 /** Stable id from the transaction's own content, so re-importing the same file never duplicates rows. */
-export function txId(date: string, amount: number, description: string): string {
-  const src = `${date}|${amount.toFixed(2)}|${description.trim().toLowerCase()}`;
+export function txId(date: string, amount: number, description: string, reference = ''): string {
+  const src = `${date}|${amount.toFixed(2)}|${description.trim().toLowerCase()}|${reference.trim().toLowerCase()}`;
   let h1 = 0x811c9dc5;
   let h2 = 0x1000193;
   for (let i = 0; i < src.length; i++) {
@@ -107,21 +107,27 @@ function findCol(headers: string[], patterns: RegExp[]): number {
 
 /**
  * Reads a bank transaction export (Relay and most bank CSVs).
- * Detects columns by header name; supports a single signed Amount column or separate Debit/Credit columns.
+ * Detects columns by header name; supports Relay's multi-column exports (Date, Description, Payee/Counterparty,
+ * Reference/Memo, Category, Type, Account Name, Status, Amount or Money In/Money Out) and skips Canceled/Declined/Failed rows.
  */
 export function parseBankCsv(text: string): ParsedCsv {
   const rows = parseCsv(text);
   if (rows.length < 2) return { txs: [], error: 'That file has no transaction rows. Export the CSV from Relay → Transactions → Export.' };
 
   const headers = rows[0].map((h) => h.trim().toLowerCase());
-  const dateCol = findCol(headers, [/^(transaction\s*)?date$/, /date/]);
-  const descCol = findCol(headers, [/^description$/, /description|details|merchant|counterparty|name|payee|memo/]);
-  const amountCol = findCol(headers, [/^amount/, /amount/]);
-  const debitCol = findCol(headers, [/debit|withdraw|money\s*out/]);
-  const creditCol = findCol(headers, [/credit|deposit|money\s*in/]);
-  const accountCol = findCol(headers, [/account/]);
+  const dateCol = findCol(headers, [/^(transaction\s*|posted\s*|settlement\s*)?date$/, /date/]);
+  const descCol = findCol(headers, [/^description$/, /description|details|narrative/]);
+  const payeeCol = findCol(headers, [/^payee$/, /counterparty|merchant|vendor|recipient|sender|^name$/]);
+  const refCol = findCol(headers, [/reference|memo|note|check\s*(number|#)|external\s*id/]);
+  const catCol = findCol(headers, [/^category$/, /category|gl\s*code|expense\s*type/]);
+  const typeCol = findCol(headers, [/^(transaction\s*)?type$/, /payment\s*method|rails|channel/]);
+  const statusCol = findCol(headers, [/^status$/, /state/]);
+  const amountCol = findCol(headers, [/^amount/, /net\s*amount/, /amount/]);
+  const debitCol = findCol(headers, [/debit|withdraw|money\s*out|outflow/]);
+  const creditCol = findCol(headers, [/credit|deposit|money\s*in|inflow/]);
+  const accountCol = findCol(headers, [/^account(\s*name)?$/, /account|sub-?account/]);
 
-  if (dateCol === -1 || descCol === -1 || (amountCol === -1 && debitCol === -1 && creditCol === -1)) {
+  if (dateCol === -1 || (descCol === -1 && payeeCol === -1 && refCol === -1) || (amountCol === -1 && debitCol === -1 && creditCol === -1)) {
     return {
       txs: [],
       error: 'Couldn\u2019t find Date, Description and Amount columns. Use the transaction CSV export from Relay.',
@@ -131,8 +137,21 @@ export function parseBankCsv(text: string): ParsedCsv {
   const txs: BankTx[] = [];
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
+    const statusRaw = statusCol !== -1 ? (cells[statusCol] ?? '').trim() : '';
+    if (statusRaw && /^(cancel|declin|fail|void|reject)/i.test(statusRaw)) continue;
+
     const date = isoDate(cells[dateCol] ?? '');
-    const description = (cells[descCol] ?? '').trim();
+    const rawDesc = descCol !== -1 ? (cells[descCol] ?? '').trim() : '';
+    const rawPayee = payeeCol !== -1 ? (cells[payeeCol] ?? '').trim() : '';
+    const rawRef = refCol !== -1 ? (cells[refCol] ?? '').trim() : '';
+    const parts: string[] = [];
+    for (const part of [rawPayee, rawDesc, rawRef]) {
+      if (part && !parts.some((existing) => existing.toLowerCase().includes(part.toLowerCase()))) {
+        parts.push(part);
+      }
+    }
+    const description = parts.join(' · ');
+
     let amount: number | null = null;
     if (amountCol !== -1) {
       amount = parseAmount(cells[amountCol] ?? '');
@@ -143,12 +162,20 @@ export function parseBankCsv(text: string): ParsedCsv {
       if (debit !== null || credit !== null) amount = (credit ?? 0) - Math.abs(debit ?? 0);
     }
     if (!date || amount === null || (!description && amount === 0)) continue;
+
+    const category = catCol !== -1 ? (cells[catCol] ?? '').trim() : '';
+    const txType = typeCol !== -1 ? (cells[typeCol] ?? '').trim() : '';
+
     txs.push({
-      id: txId(date, amount, description),
+      id: txId(date, amount, description, rawRef),
       date,
       description,
       amount,
       account: accountCol !== -1 ? (cells[accountCol] ?? '').trim() : '',
+      ...(category ? { category } : {}),
+      ...(txType ? { txType } : {}),
+      ...(rawRef ? { reference: rawRef } : {}),
+      ...(statusRaw ? { status: statusRaw } : {}),
     });
   }
   if (txs.length === 0) return { txs, error: 'No readable transactions found in that file.' };
@@ -159,13 +186,14 @@ export interface MatchSuggestion {
   tx: BankTx;
   invoice: Invoice;
   total: number;
-  reason: 'number' | 'amount';
+  reason: 'number' | 'client' | 'amount';
 }
 
 /**
  * Pairs unmatched deposits with unpaid invoices.
- * An invoice number in the description (the memo customers copy) is a strong match;
- * otherwise an exact amount match is suggested when it is unambiguous.
+ * 1) Invoice number or work order number in the description/memo.
+ * 2) Client name in the description/payee + exact amount match.
+ * 3) Unambiguous exact amount match.
  */
 export function suggestMatches(txs: BankTx[], invoices: Invoice[], lines: LineItem[]): MatchSuggestion[] {
   const openInvoices = invoices.filter((i) => i.status !== 'paid');
@@ -177,17 +205,38 @@ export function suggestMatches(txs: BankTx[], invoices: Invoice[], lines: LineIt
   const out: MatchSuggestion[] = [];
   const claimedInvoices = new Set<string>();
 
-  // Pass 1: invoice number in the description.
+  // Pass 1: invoice number or work order number in the description/reference.
   for (const tx of deposits) {
-    const desc = tx.description.toLowerCase().replace(/[\s_]+/g, '');
-    const hit = openInvoices.find((i) => !claimedInvoices.has(i.id) && desc.includes(i.number.toLowerCase().replace(/[\s_]+/g, '')));
+    const desc = `${tx.description} ${tx.reference ?? ''}`.toLowerCase().replace(/[\s_]+/g, '');
+    const hit = openInvoices.find((i) => {
+      if (claimedInvoices.has(i.id)) return false;
+      const numNorm = i.number.toLowerCase().replace(/[\s_]+/g, '');
+      const woNorm = i.workOrderNo.trim().toLowerCase().replace(/[\s_]+/g, '');
+      return (numNorm && desc.includes(numNorm)) || (woNorm.length >= 4 && desc.includes(woNorm));
+    });
     if (hit) {
       claimedInvoices.add(hit.id);
       out.push({ tx, invoice: hit, total: totals.get(hit.id) ?? 0, reason: 'number' });
     }
   }
 
-  // Pass 2: exact amount, only when exactly one open invoice has that total.
+  // Pass 2: client name in the deposit description + exact amount match.
+  for (const tx of deposits) {
+    if (out.some((m) => m.tx.id === tx.id)) continue;
+    const descLower = tx.description.toLowerCase();
+    const hit = openInvoices.find((i) => {
+      if (claimedInvoices.has(i.id)) return false;
+      const client = i.clientName.trim().toLowerCase();
+      if (client.length < 3 || !descLower.includes(client)) return false;
+      return Math.abs((totals.get(i.id) ?? -1) - tx.amount) < 0.005;
+    });
+    if (hit) {
+      claimedInvoices.add(hit.id);
+      out.push({ tx, invoice: hit, total: totals.get(hit.id) ?? 0, reason: 'client' });
+    }
+  }
+
+  // Pass 3: exact amount, only when exactly one open invoice has that total.
   for (const tx of deposits) {
     if (out.some((m) => m.tx.id === tx.id)) continue;
     const candidates = openInvoices.filter(
@@ -247,17 +296,49 @@ export function availableBankYears(txs: BankTx[]): string[] {
   return [...years].sort((a, b) => (a < b ? 1 : -1));
 }
 
+export function availableBankAccounts(txs: BankTx[]): string[] {
+  const set = new Set<string>();
+  for (const t of txs) {
+    const a = t.account.trim();
+    if (a) set.add(a);
+  }
+  return [...set].sort();
+}
+
+export interface AccountSummary {
+  account: string;
+  moneyIn: number;
+  moneyOut: number;
+  net: number;
+  count: number;
+}
+
+/** Summarizes total cash flow per Relay checking/reserve account. */
+export function accountSummaries(txs: BankTx[]): AccountSummary[] {
+  const map = new Map<string, AccountSummary>();
+  for (const t of txs) {
+    const account = t.account.trim() || 'Primary Operating';
+    const cur = map.get(account) ?? { account, moneyIn: 0, moneyOut: 0, net: 0, count: 0 };
+    if (t.amount >= 0) cur.moneyIn += t.amount;
+    else cur.moneyOut += -t.amount;
+    cur.net += t.amount;
+    cur.count += 1;
+    map.set(account, cur);
+  }
+  return [...map.values()].sort((a, b) => b.net - a.net);
+}
+
 /** Builds a chronological Schedule C / bookkeeper CSV ledger of imported transactions and matched invoices. */
-export function buildAccountingCsv(txs: BankTx[], invoices: Invoice[], year?: string): string {
+export function buildAccountingCsv(txs: BankTx[], invoices: Invoice[], year?: string, account?: string): string {
   const byId = new Map<string, Invoice>();
   for (const inv of invoices) byId.set(inv.id, inv);
 
   const filtered = txs
-    .filter((t) => !year || t.date.startsWith(`${year}-`))
+    .filter((t) => (!year || t.date.startsWith(`${year}-`)) && (!account || (t.account.trim() || 'Primary Operating') === account))
     .slice()
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.description.localeCompare(b.description)));
 
-  const header = ['Date', 'Type', 'Description', 'Account', 'Money In', 'Money Out', 'Net Amount', 'Matched Invoice', 'Client'];
+  const header = ['Date', 'Type', 'Payment Method', 'Category', 'Description', 'Reference / Memo', 'Relay Account', 'Money In', 'Money Out', 'Net Amount', 'Matched Invoice', 'Client'];
   const rows = [header.map(csvCell).join(',')];
 
   for (const t of filtered) {
@@ -267,8 +348,11 @@ export function buildAccountingCsv(txs: BankTx[], invoices: Invoice[], year?: st
       [
         t.date,
         isIncome ? 'Income' : 'Expense',
+        t.txType ?? '',
+        t.category ?? '',
         t.description,
-        t.account,
+        t.reference ?? '',
+        t.account || 'Primary Operating',
         isIncome ? t.amount.toFixed(2) : '',
         isIncome ? '' : Math.abs(t.amount).toFixed(2),
         t.amount.toFixed(2),

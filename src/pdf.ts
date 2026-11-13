@@ -92,6 +92,18 @@ export function buildInvoiceHtml(inv: Invoice, lines: LineItem[], s: Settings): 
     : `<tr><td colspan="4" class="none">No parts on this invoice</td></tr>`;
 
   const bizContact = [s.phone, s.email].filter((x) => x && x.trim()).map(esc).join(' &middot; ');
+  const portalUrl = s.portalBaseUrl && s.portalBaseUrl.trim() ? `${s.portalBaseUrl.trim().replace(/\/+$/, '')}/pay/${inv.id}` : '';
+  const paymentMethodsBlock = [
+    s.zelleHandle && s.zelleHandle.trim()
+      ? `<b>Zelle ($0 fee):</b> ${esc(s.zelleHandle.trim())} &middot; Memo: <b>${esc(inv.number)}</b>`
+      : '',
+    s.relayRoutingNumber && s.relayRoutingNumber.trim() && s.relayAccountNumber && s.relayAccountNumber.trim()
+      ? `<b>ACH / Wire (${esc(s.relayBankName && s.relayBankName.trim() ? s.relayBankName.trim() : 'Relay Financial')}):</b> Routing <b>${esc(s.relayRoutingNumber.trim())}</b> &middot; Account <b>${esc(s.relayAccountNumber.trim())}</b> &middot; Memo: <b>${esc(inv.number)}</b>`
+      : '',
+    portalUrl ? `<b>Pay online ($0 fee):</b> ${esc(portalUrl)}` : '',
+  ]
+    .filter(Boolean)
+    .join('<br/>');
   const paymentLine = [inv.paymentMethod && `Payment method: ${inv.paymentMethod}`, s.paymentTerms && `Terms: ${s.paymentTerms}`]
     .filter(Boolean)
     .map((x) => escMultiline(x as string))
@@ -212,6 +224,7 @@ export function buildInvoiceHtml(inv: Invoice, lines: LineItem[], s: Settings): 
   </table>
 
   <div class="notes">
+    ${paymentMethodsBlock ? `<h2>How to pay ($0 fee)</h2><p>${paymentMethodsBlock}</p>` : ''}
     ${paymentLine ? `<p>${paymentLine}</p>` : ''}
     ${inv.notes && inv.notes.trim() ? `<h2>Notes</h2><p>${escMultiline(inv.notes)}</p>` : ''}
   </div>
