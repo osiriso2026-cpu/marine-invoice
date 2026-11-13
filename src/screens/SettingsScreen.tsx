@@ -12,8 +12,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useStore } from '../store';
+import { hasSupabaseConfig, SUPABASE_SETUP_SQL } from '../cloud';
 import { makeStyles, tokens, useColors } from '../theme';
 import type { Settings } from '../types';
 
@@ -37,12 +39,22 @@ type FormState = {
   yelpReviewUrl: string;
   facebookReviewUrl: string;
   nextdoorReviewUrl: string;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 };
 
 type Errors = Partial<Record<keyof FormState, string>>;
 
 const NUMERIC: (keyof FormState)[] = ['defaultHourlyRate', 'defaultTaxRate', 'defaultMarkupPct'];
-const URL_FIELDS: (keyof FormState)[] = ['portalBaseUrl', 'stripePaymentUrl', 'googleReviewUrl', 'yelpReviewUrl', 'facebookReviewUrl', 'nextdoorReviewUrl'];
+const URL_FIELDS: (keyof FormState)[] = [
+  'portalBaseUrl',
+  'stripePaymentUrl',
+  'googleReviewUrl',
+  'yelpReviewUrl',
+  'facebookReviewUrl',
+  'nextdoorReviewUrl',
+  'supabaseUrl',
+];
 
 function numToText(n: number): string {
   return Number.isFinite(n) ? String(n) : '';
@@ -69,6 +81,8 @@ function toForm(s: Settings): FormState {
     yelpReviewUrl: s.yelpReviewUrl ?? '',
     facebookReviewUrl: s.facebookReviewUrl ?? '',
     nextdoorReviewUrl: s.nextdoorReviewUrl ?? '',
+    supabaseUrl: s.supabaseUrl ?? '',
+    supabaseAnonKey: s.supabaseAnonKey ?? '',
   };
 }
 
@@ -113,7 +127,7 @@ function validateAll(form: FormState): Errors {
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export default function SettingsScreen(): JSX.Element {
-  const { data, ready, saveSettings } = useStore();
+  const { data, ready, saveSettings, syncCloudNow } = useStore();
   const c = useColors();
   const base = useMemo(() => makeStyles(c), [c]);
   const t = tokens;
@@ -121,6 +135,8 @@ export default function SettingsScreen(): JSX.Element {
   const [form, setForm] = useState<FormState>(() => toForm(data.settings));
   const [errors, setErrors] = useState<Errors>({});
   const [saving, setSaving] = useState(false);
+  const [syncingCloud, setSyncingCloud] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
@@ -190,6 +206,8 @@ export default function SettingsScreen(): JSX.Element {
       yelpReviewUrl: form.yelpReviewUrl.trim(),
       facebookReviewUrl: form.facebookReviewUrl.trim(),
       nextdoorReviewUrl: form.nextdoorReviewUrl.trim(),
+      supabaseUrl: form.supabaseUrl.trim().replace(/\/+$/, ''),
+      supabaseAnonKey: form.supabaseAnonKey.trim(),
     };
     setSaving(true);
     try {
@@ -313,15 +331,11 @@ export default function SettingsScreen(): JSX.Element {
               autoCapitalize: 'words',
             })}
             {renderField('address', 'Address', {
-              placeholder: '12 Dockside Way\nPort Clyde, ME 04855',
+              placeholder: 'Key West & Lower Keys, FL',
               multiline: true,
               autoCapitalize: 'words',
             })}
-            {renderField('licenseNo', 'License #', {
-              placeholder: 'e.g. MR-20418',
-              autoCapitalize: 'characters',
-            })}
-            {renderField('phone', 'Phone', { placeholder: '(207) 555-0142', keyboardType: 'phone-pad' })}
+            {renderField('phone', 'Phone', { placeholder: '(305) 767-3770', keyboardType: 'phone-pad' })}
             {renderField('email', 'Email', {
               placeholder: 'shop@example.com',
               keyboardType: 'email-address',
@@ -438,6 +452,72 @@ export default function SettingsScreen(): JSX.Element {
               placeholder: 'https://nextdoor.com/pages/…/recommend/',
               autoCapitalize: 'none',
             })}
+          </View>
+
+          <View style={base.card}>
+            <Text style={s.sectionTitle} accessibilityRole="header">
+              Cloud database sync (Optional — Supabase)
+            </Text>
+            <Text style={s.sectionHint}>
+              Your customer payment links already work out-of-the-box with zero database required (invoice details are
+              securely encoded inside each shareable link). If you ever want live two-way cloud database sync, paste a
+              Supabase URL and Anon Key below.
+            </Text>
+            {renderField('supabaseUrl', 'Supabase Project URL (optional)', {
+              placeholder: 'https://xxxx.supabase.co',
+              autoCapitalize: 'none',
+            })}
+            {renderField('supabaseAnonKey', 'Supabase Anon Public Key (optional)', {
+              placeholder: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…',
+              autoCapitalize: 'none',
+            })}
+            <View style={s.row}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Copy Supabase SQL setup script"
+                onPress={async () => {
+                  try {
+                    await Clipboard.setStringAsync(SUPABASE_SETUP_SQL);
+                    setCopiedSql(true);
+                    showToast('Supabase SQL setup script copied to clipboard.');
+                    setTimeout(() => setCopiedSql(false), 3000);
+                  } catch {
+                    showToast('Could not copy SQL script.');
+                  }
+                }}
+                style={({ pressed }) => [base.btn, base.btnSecondary, { flex: 1 }, pressed && base.btnPressed]}
+              >
+                <View style={s.btnLabelRow}>
+                  <Feather name={copiedSql ? 'check' : 'copy'} size={18} color={c.ink} />
+                  <Text style={base.btnText}>{copiedSql ? 'SQL copied!' : 'Copy SQL table script'}</Text>
+                </View>
+              </Pressable>
+              {hasSupabaseConfig(form) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Test and sync cloud now"
+                  disabled={syncingCloud}
+                  onPress={async () => {
+                    setSyncingCloud(true);
+                    const ok = await syncCloudNow();
+                    setSyncingCloud(false);
+                    showToast(ok ? 'Synced with Supabase cloud!' : 'Could not reach Supabase — check URL, key & tables.');
+                  }}
+                  style={({ pressed }) => [
+                    base.btn,
+                    base.btnSecondary,
+                    { flex: 1 },
+                    syncingCloud && base.btnDisabled,
+                    pressed && base.btnPressed,
+                  ]}
+                >
+                  <View style={s.btnLabelRow}>
+                    <Feather name="refresh-cw" size={18} color={c.accent} />
+                    <Text style={[base.btnText, { color: c.accent }]}>{syncingCloud ? 'Syncing…' : 'Sync cloud now'}</Text>
+                  </View>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
 
           <View style={base.card}>

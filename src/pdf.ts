@@ -3,6 +3,7 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import type { Invoice, LineItem, Settings } from './types';
 import { computeTotals, lineTotal, money } from './calc';
+import { buildCustomerPortalUrl } from './cloud';
 
 const ACCENT = '#0B6E8A';
 const INK = '#10252E';
@@ -92,7 +93,11 @@ export function buildInvoiceHtml(inv: Invoice, lines: LineItem[], s: Settings): 
     : `<tr><td colspan="4" class="none">No parts on this invoice</td></tr>`;
 
   const bizContact = [s.phone, s.email].filter((x) => x && x.trim()).map(esc).join(' &middot; ');
-  const portalUrl = s.portalBaseUrl && s.portalBaseUrl.trim() ? `${s.portalBaseUrl.trim().replace(/\/+$/, '')}/pay/${inv.id}` : '';
+  const fullPortalUrl = buildCustomerPortalUrl(inv, lines, s);
+  const shortPortalDisplay =
+    s.portalBaseUrl && s.portalBaseUrl.trim()
+      ? `${s.portalBaseUrl.trim().replace(/\/+$/, '')}/pay/${inv.id}`
+      : fullPortalUrl;
   const paymentMethodsBlock = [
     s.zelleHandle && s.zelleHandle.trim()
       ? `<b>Zelle ($0 fee):</b> ${esc(s.zelleHandle.trim())} &middot; Memo: <b>${esc(inv.number)}</b>`
@@ -100,7 +105,9 @@ export function buildInvoiceHtml(inv: Invoice, lines: LineItem[], s: Settings): 
     s.relayRoutingNumber && s.relayRoutingNumber.trim() && s.relayAccountNumber && s.relayAccountNumber.trim()
       ? `<b>ACH / Wire (${esc(s.relayBankName && s.relayBankName.trim() ? s.relayBankName.trim() : 'Relay Financial')}):</b> Routing <b>${esc(s.relayRoutingNumber.trim())}</b> &middot; Account <b>${esc(s.relayAccountNumber.trim())}</b> &middot; Memo: <b>${esc(inv.number)}</b>`
       : '',
-    portalUrl ? `<b>Pay online ($0 fee):</b> ${esc(portalUrl)}` : '',
+    fullPortalUrl
+      ? `<b>Pay online ($0 fee):</b> <a href="${esc(fullPortalUrl)}" style="color:${ACCENT};text-decoration:underline;">${esc(shortPortalDisplay)}</a>`
+      : '',
   ]
     .filter(Boolean)
     .join('<br/>');
@@ -163,7 +170,6 @@ export function buildInvoiceHtml(inv: Invoice, lines: LineItem[], s: Settings): 
       <h1>${esc(s.businessName || 'Marine repair')}</h1>
       ${s.address ? `<p>${escMultiline(s.address)}</p>` : ''}
       ${bizContact ? `<p>${bizContact}</p>` : ''}
-      ${s.licenseNo ? `<p><b>License #:</b> ${esc(s.licenseNo)}</p>` : ''}
     </div>
     <div class="meta">
       <div class="doc">INVOICE</div>

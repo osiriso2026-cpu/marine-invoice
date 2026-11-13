@@ -19,6 +19,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useStore } from '../store';
 import { computeTotals, lineTotal, money } from '../calc';
+import { buildCustomerPortalUrl, encodePortalSnapshot } from '../cloud';
 import { shareInvoicePdf } from '../pdf';
 import CatalogPicker from './CatalogPicker';
 import { makeStyles, tokens, useColors } from '../theme';
@@ -490,11 +491,7 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
   const onTextLink = async () => {
     if (!inv) return;
     await flush();
-    const url = getPortalUrl(store.data.settings.portalBaseUrl, inv.id);
-    if (!url) {
-      showToast('Add your Customer portal web URL in Settings → Payments first.');
-      return;
-    }
+    const url = buildCustomerPortalUrl(inv, lines, store.data.settings);
     const currentTotals = computeTotals(inv, lines);
     const msg = buildPaymentSmsText(store.data.settings.businessName, inv, currentTotals.total, url);
     const copied = await copyToClipboard(msg);
@@ -505,15 +502,15 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
     const isDesktopWeb = Platform.OS === 'web' && !/iPhone|iPad|iPod|Android|Macintosh/i.test(ua);
 
     if (isDesktopWeb) {
-      showToast(copied ? 'Payment text & link copied! Paste into Messages or email.' : url);
+      showToast(copied ? 'Shareable payment text & link copied! Works on any phone.' : url);
       return;
     }
 
     try {
       await Linking.openURL(smsUrl);
-      if (copied) showToast('Payment text also copied to clipboard.');
+      if (copied) showToast('Shareable payment text also copied to clipboard.');
     } catch {
-      showToast(copied ? 'Payment text & link copied to clipboard.' : url);
+      showToast(copied ? 'Shareable payment text & link copied to clipboard.' : url);
     }
   };
 
@@ -827,7 +824,11 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
               label="Customer page"
               icon="credit-card"
               variant="secondary"
-              onPress={() => { void flush(); navigation.navigate('CustomerPortal', { invoiceId: inv.id }); }}
+              onPress={() => {
+                void flush();
+                const d = encodePortalSnapshot(inv, lines, store.data.settings);
+                navigation.navigate('CustomerPortal', { invoiceId: inv.id, d });
+              }}
             />
             <Btn label={SHARE_LABEL} icon="share" variant="primary" onPress={onShare} busy={sharing} />
           </View>

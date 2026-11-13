@@ -61,9 +61,13 @@ export function createKvBackend(persist: boolean): Backend {
         parsed = null;
       }
     }
+    const mergedSettings: Settings = { ...DEFAULT_SETTINGS, ...(parsed?.settings ?? {}) };
+    if (!mergedSettings.portalBaseUrl) {
+      mergedSettings.portalBaseUrl = DEFAULT_SETTINGS.portalBaseUrl;
+    }
     const next: KvState = parsed
       ? {
-          settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+          settings: mergedSettings,
           catalog: Array.isArray(parsed.catalog) ? parsed.catalog : base.catalog,
           invoices: Array.isArray(parsed.invoices) ? parsed.invoices : [],
           lines: Array.isArray(parsed.lines) ? parsed.lines : [],

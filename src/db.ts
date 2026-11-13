@@ -303,7 +303,9 @@ async function loadSettings(): Promise<Settings> {
   if (!row) return { ...DEFAULT_SETTINGS };
   try {
     const parsed = JSON.parse(row.value) as Partial<Settings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const merged: Settings = { ...DEFAULT_SETTINGS, ...parsed };
+    if (!merged.portalBaseUrl) merged.portalBaseUrl = DEFAULT_SETTINGS.portalBaseUrl;
+    return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

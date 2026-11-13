@@ -5,6 +5,13 @@ import * as db from './db';
 import { createKvBackend } from './kvdb';
 import type { Backend } from './kvdb';
 import { buildSampleInvoices } from './samples';
+import {
+  hasSupabaseConfig,
+  pullCustomerActivityFromCloud,
+  pushClaimToCloud,
+  pushReviewToCloud,
+  syncInvoiceToCloud,
+} from './cloud';
 
 const MEMORY_NOTE = 'Invoices are kept in memory on this device until storage works again.';
 const REVIEWS_KEY = 'reviews:v1';
@@ -61,6 +68,8 @@ const EMPTY_SETTINGS: Settings = {
   yelpReviewUrl: '',
   facebookReviewUrl: '',
   nextdoorReviewUrl: '',
+  supabaseUrl: '',
+  supabaseAnonKey: '',
 };
 
 const EMPTY_DATA: AppData = { settings: EMPTY_SETTINGS, catalog: [], invoices: [], lines: [] };
@@ -212,6 +221,22 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
     }
     setStorageError(err);
     setReady(true);
+    if (hasSupabaseConfig(sorted.settings)) {
+      void pullCustomerActivityFromCloud(sorted.settings).then((remote) => {
+        if (!remote) return;
+        const mergedClaims = { ...claimsRef.current, ...remote.claims };
+        const byId = new Map<string, Review>();
+        for (const r of reviewsRef.current) byId.set(r.id, r);
+        for (const r of remote.reviews) byId.set(r.id, r);
+        const mergedReviews = Array.from(byId.values());
+        claimsRef.current = mergedClaims;
+        reviewsRef.current = mergedReviews;
+        setPaymentClaims(mergedClaims);
+        setReviews(mergedReviews);
+        void b.setMeta(CLAIMS_KEY, JSON.stringify(mergedClaims));
+        void b.setMeta(REVIEWS_KEY, JSON.stringify(mergedReviews));
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -265,6 +290,7 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
           lines: [...d.lines.filter((l) => l.invoiceId !== inv.id), ...mine],
         };
       });
+      void syncInvoiceToCloud(stamped, mine, dataRef.current.settings);
       return enqueue(() => backendRef.current.saveInvoice(stamped, mine));
     },
     [enqueue, update],
@@ -326,6 +352,7 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
       const next = [...reviewsRef.current.filter((x) => x.id !== r.id), r];
       reviewsRef.current = next;
       setReviews(next);
+      void pushReviewToCloud(r, dataRef.current.settings);
       return enqueue(() => backendRef.current.setMeta(REVIEWS_KEY, JSON.stringify(next)));
     },
     [enqueue],
@@ -333,13 +360,40 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
 
   const claimPayment = useCallback(
     (invoiceId: string, method: string) => {
-      const next = { ...claimsRef.current, [invoiceId]: { method, claimedAt: Date.now() } };
+      const claim: PaymentClaim = { method, claimedAt: Date.now() };
+      const next = { ...claimsRef.current, [invoiceId]: claim };
       claimsRef.current = next;
       setPaymentClaims(next);
+      void pushClaimToCloud(invoiceId, claim, dataRef.current.settings);
       return enqueue(() => backendRef.current.setMeta(CLAIMS_KEY, JSON.stringify(next)));
     },
     [enqueue],
   );
+
+  const syncCloudNow = useCallback(async (): Promise<boolean> => {
+    const s = dataRef.current.settings;
+    if (!hasSupabaseConfig(s)) return false;
+    for (const inv of dataRef.current.invoices) {
+      const ls = dataRef.current.lines.filter((l) => l.invoiceId === inv.id);
+      await syncInvoiceToCloud(inv, ls, s);
+    }
+    const remote = await pullCustomerActivityFromCloud(s);
+    if (!remote) return false;
+    const mergedClaims = { ...claimsRef.current, ...remote.claims };
+    const byId = new Map<string, Review>();
+    for (const r of reviewsRef.current) byId.set(r.id, r);
+    for (const r of remote.reviews) byId.set(r.id, r);
+    const mergedReviews = Array.from(byId.values());
+    claimsRef.current = mergedClaims;
+    reviewsRef.current = mergedReviews;
+    setPaymentClaims(mergedClaims);
+    setReviews(mergedReviews);
+    await enqueue(async () => {
+      await backendRef.current.setMeta(CLAIMS_KEY, JSON.stringify(mergedClaims));
+      await backendRef.current.setMeta(REVIEWS_KEY, JSON.stringify(mergedReviews));
+    });
+    return true;
+  }, [enqueue]);
 
   const importBankTxs = useCallback(
     (incoming: BankTx[]) => {
@@ -427,6 +481,7 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
       deleteCatalogItem,
       resetCatalog,
       saveSettings,
+      syncCloudNow,
     }),
     [
       ready,
@@ -448,6 +503,7 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
       deleteCatalogItem,
       resetCatalog,
       saveSettings,
+      syncCloudNow,
     ],
   );
 

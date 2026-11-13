@@ -95,14 +95,34 @@ function Themed(): JSX.Element {
   const c = useColors();
   const isDark = c.bg === '#0C171C';
   const base = isDark ? DarkTheme : DefaultTheme;
+  if (Platform.OS === 'web') {
+    const win = globalThis as {
+      location?: { search?: string; pathname?: string; hash?: string };
+      history?: { replaceState(data: unknown, unused: string, url?: string | null): void };
+    };
+    const search = win.location?.search || '';
+    const m = /[?&]p=([^&]+)/.exec(search);
+    if (m && win.history?.replaceState) {
+      try {
+        const restored = decodeURIComponent(m[1]);
+        win.history.replaceState(null, '', restored + (win.location?.hash || ''));
+      } catch {
+        /* ignore malformed redirect */
+      }
+    }
+  }
+  const webPrefix =
+    Platform.OS === 'web' && (globalThis as { location?: { pathname?: string } }).location?.pathname?.startsWith('/marine-invoice')
+      ? 'marine-invoice/'
+      : '';
   // On the web, /pay/<invoiceId> opens the read-only customer payment page directly.
   const linking: LinkingOptions<RootStackParams> = {
     prefixes: [],
     config: {
       screens: {
-        Tabs: '',
-        InvoiceEditor: 'edit/:invoiceId',
-        CustomerPortal: 'pay/:invoiceId',
+        Tabs: webPrefix,
+        InvoiceEditor: `${webPrefix}edit/:invoiceId`,
+        CustomerPortal: `${webPrefix}pay/:invoiceId`,
       },
     },
   };

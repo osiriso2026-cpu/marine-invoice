@@ -5,6 +5,14 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useStore } from '../store';
 import { computeTotals, lineTotal, money } from '../calc';
+import {
+  decodePortalSnapshot,
+  fetchInvoiceFromCloud,
+  hasSupabaseConfig,
+  PortalSnapshot,
+  pushClaimToCloud,
+  pushReviewToCloud,
+} from '../cloud';
 import { makeStyles, tokens, useColors } from '../theme';
 import { Button } from '../ui';
 import type { EditorProps, Invoice, LineItem, Review, Settings } from '../types';
@@ -50,20 +58,56 @@ function draftReview(s: Settings, inv: Invoice): string {
 }
 
 export default function CustomerPortalScreen({ route, navigation }: EditorProps): JSX.Element {
-  const { invoiceId } = route.params;
+  const { invoiceId, d } = route.params;
   const store = useStore();
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
-  const settings = store.data.settings;
 
-  const inv = store.data.invoices.find((i) => i.id === invoiceId);
-  const lines = useMemo(
+  const urlSnapshot = useMemo(() => decodePortalSnapshot(d), [d]);
+  const [cloudSnapshot, setCloudSnapshot] = useState<PortalSnapshot | null>(null);
+  const [cloudLoading, setCloudLoading] = useState(false);
+
+  const localInv = store.data.invoices.find((i) => i.id === invoiceId);
+  const localLines = useMemo(
     () =>
       store.data.lines
         .filter((l) => l.invoiceId === invoiceId)
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [store.data.lines, invoiceId],
   );
+
+  const activeSnap = cloudSnapshot ?? urlSnapshot;
+  const inv = localInv ?? activeSnap?.inv;
+  const lines = useMemo(() => {
+    if (localInv) return localLines;
+    if (activeSnap?.lines) return [...activeSnap.lines].sort((a, b) => a.sortOrder - b.sortOrder);
+    return [];
+  }, [localInv, localLines, activeSnap]);
+
+  const settings: Settings = useMemo(() => {
+    if (localInv || !activeSnap?.biz) return store.data.settings;
+    return {
+      ...store.data.settings,
+      ...activeSnap.biz,
+      supabaseUrl: activeSnap.biz.supabaseUrl || store.data.settings.supabaseUrl,
+      supabaseAnonKey: activeSnap.biz.supabaseAnonKey || store.data.settings.supabaseAnonKey,
+    };
+  }, [localInv, activeSnap, store.data.settings]);
+
+  React.useEffect(() => {
+    const cfg = {
+      supabaseUrl: urlSnapshot?.biz?.supabaseUrl || store.data.settings.supabaseUrl,
+      supabaseAnonKey: urlSnapshot?.biz?.supabaseAnonKey || store.data.settings.supabaseAnonKey,
+    };
+    if (!localInv && hasSupabaseConfig(cfg)) {
+      setCloudLoading(true);
+      void fetchInvoiceFromCloud(invoiceId, cfg).then((remote) => {
+        if (remote) setCloudSnapshot(remote);
+        setCloudLoading(false);
+      });
+    }
+  }, [invoiceId, localInv, urlSnapshot, store.data.settings.supabaseUrl, store.data.settings.supabaseAnonKey]);
+
   const existingReview = store.reviews.find((r) => r.invoiceId === invoiceId);
   const claim = inv ? store.paymentClaims[inv.id] : undefined;
 
@@ -95,7 +139,7 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
     lineHeight: tokens.lineHeight.lg,
   } as const;
 
-  if (!store.ready) {
+  if ((!store.ready && !urlSnapshot) || (cloudLoading && !inv)) {
     return (
       <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
         <View style={{ padding: tokens.space[4], gap: tokens.space[3] }}>
@@ -151,16 +195,23 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
     }
   };
 
+  const recordClaim = (method: string) => {
+    void store.claimPayment(inv.id, method);
+    if (hasSupabaseConfig(settings)) {
+      void pushClaimToCloud(inv.id, { method, claimedAt: Date.now() }, settings);
+    }
+  };
+
   const onZelleSent = () => {
-    void store.claimPayment(inv.id, 'Zelle');
+    recordClaim('Zelle');
   };
 
   const onRelayAchSent = () => {
-    void store.claimPayment(inv.id, 'Relay ACH / Wire');
+    recordClaim('Relay ACH / Wire');
   };
 
   const onStripe = () => {
-    void store.claimPayment(inv.id, 'Bank transfer (ACH)');
+    recordClaim('Bank transfer (ACH)');
     Linking.openURL(stripeUrl).catch(() => undefined);
   };
 
@@ -176,6 +227,9 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
       createdAt: Date.now(),
     };
     await store.saveReview(review);
+    if (hasSupabaseConfig(settings)) {
+      void pushReviewToCloud(review, settings);
+    }
     if (rating >= 4) setCopiedReview(await copyText(text));
     setReviewSubmitted(true);
   };
@@ -529,7 +583,6 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
         <Text style={[s.muted, { textAlign: 'center', fontSize: tokens.fontSize.xs }]}>
           {[
             settings.businessName || 'Mobile Marine Doc',
-            settings.licenseNo ? `Lic. ${settings.licenseNo}` : '',
             settings.phone,
             Platform.OS === 'web' ? 'mobilemarinedoc.com' : '',
           ]

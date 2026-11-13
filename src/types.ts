@@ -21,6 +21,9 @@ export interface Settings {
   yelpReviewUrl: string;
   facebookReviewUrl: string;
   nextdoorReviewUrl: string;
+  /** Optional Supabase project URL & anon key for two-way live customer portal sync. */
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 }
 
 /** A review a customer left on the payment page. Private ones (1-3 stars) are only shown to the owner. */
@@ -69,8 +72,14 @@ export interface Store {
   deleteCatalogItem(id: string): Promise<void>;
   resetCatalog(): Promise<void>;
   saveSettings(s: Settings): Promise<void>;
+  /** Pulls latest payment claims & customer reviews from Supabase when configured. */
+  syncCloudNow(): Promise<boolean>;
 }
 
-export type RootStackParams = { Tabs: undefined; InvoiceEditor: { invoiceId: string }; CustomerPortal: { invoiceId: string } };
-export interface EditorProps { route: { params: { invoiceId: string } }; navigation: any; }
+export type RootStackParams = {
+  Tabs: undefined;
+  InvoiceEditor: { invoiceId: string };
+  CustomerPortal: { invoiceId: string; d?: string };
+};
+export interface EditorProps { route: { params: { invoiceId: string; d?: string } }; navigation: any; }
 export interface CatalogPickerProps { visible: boolean; onClose(): void; onPick(item: CatalogItem): void; }
