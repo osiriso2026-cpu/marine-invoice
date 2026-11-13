@@ -1,12 +1,45 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import type { AppData, CatalogItem, Invoice, LineItem, Settings, Store } from './types';
+import type { AppData, BankTx, CatalogItem, Invoice, LineItem, PaymentClaim, Review, Settings, Store } from './types';
 import * as db from './db';
 import { createKvBackend } from './kvdb';
 import type { Backend } from './kvdb';
 import { buildSampleInvoices } from './samples';
 
 const MEMORY_NOTE = 'Invoices are kept in memory on this device until storage works again.';
+const REVIEWS_KEY = 'reviews:v1';
+const CLAIMS_KEY = 'paymentClaims:v1';
+const BANK_KEY = 'bankTxs:v1';
+
+function parseBankTxs(raw: string | null): BankTx[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? (arr as BankTx[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseReviews(raw: string | null): Review[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? (arr as Review[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseClaims(raw: string | null): Record<string, PaymentClaim> {
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === 'object' ? (obj as Record<string, PaymentClaim>) : {};
+  } catch {
+    return {};
+  }
+}
 
 const EMPTY_SETTINGS: Settings = {
   businessName: '',
@@ -18,6 +51,12 @@ const EMPTY_SETTINGS: Settings = {
   defaultTaxRate: 0,
   defaultMarkupPct: 0,
   paymentTerms: '',
+  zelleHandle: '',
+  stripePaymentUrl: '',
+  googleReviewUrl: '',
+  yelpReviewUrl: '',
+  facebookReviewUrl: '',
+  nextdoorReviewUrl: '',
 };
 
 const EMPTY_DATA: AppData = { settings: EMPTY_SETTINGS, catalog: [], invoices: [], lines: [] };
@@ -100,7 +139,13 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
   const [data, setData] = useState<AppData>(EMPTY_DATA);
   const [ready, setReady] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [paymentClaims, setPaymentClaims] = useState<Record<string, PaymentClaim>>({});
+  const [bankTxs, setBankTxs] = useState<BankTx[]>([]);
   const dataRef = useRef<AppData>(EMPTY_DATA);
+  const reviewsRef = useRef<Review[]>([]);
+  const claimsRef = useRef<Record<string, PaymentClaim>>({});
+  const bankRef = useRef<BankTx[]>([]);
   const backendRef = useRef<Backend>(createKvBackend(false));
   const queue = useRef<Promise<void>>(Promise.resolve());
 
@@ -148,6 +193,19 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
     const sorted = sortData(loaded);
     dataRef.current = sorted;
     setData(sorted);
+    try {
+      const loadedReviews = parseReviews(await b.getMeta(REVIEWS_KEY));
+      const loadedClaims = parseClaims(await b.getMeta(CLAIMS_KEY));
+      const loadedBank = parseBankTxs(await b.getMeta(BANK_KEY));
+      reviewsRef.current = loadedReviews;
+      claimsRef.current = loadedClaims;
+      bankRef.current = loadedBank;
+      setReviews(loadedReviews);
+      setPaymentClaims(loadedClaims);
+      setBankTxs(loadedBank);
+    } catch (e) {
+      console.warn('[marine-invoice] reviews/claims not loaded:', errText(e));
+    }
     setStorageError(err);
     setReady(true);
   }, []);
@@ -259,6 +317,61 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
     [enqueue, update],
   );
 
+  const saveReview = useCallback(
+    (r: Review) => {
+      const next = [...reviewsRef.current.filter((x) => x.id !== r.id), r];
+      reviewsRef.current = next;
+      setReviews(next);
+      return enqueue(() => backendRef.current.setMeta(REVIEWS_KEY, JSON.stringify(next)));
+    },
+    [enqueue],
+  );
+
+  const claimPayment = useCallback(
+    (invoiceId: string, method: string) => {
+      const next = { ...claimsRef.current, [invoiceId]: { method, claimedAt: Date.now() } };
+      claimsRef.current = next;
+      setPaymentClaims(next);
+      return enqueue(() => backendRef.current.setMeta(CLAIMS_KEY, JSON.stringify(next)));
+    },
+    [enqueue],
+  );
+
+  const importBankTxs = useCallback(
+    (incoming: BankTx[]) => {
+      const existing = new Set(bankRef.current.map((t) => t.id));
+      const fresh = incoming.filter((t) => !existing.has(t.id));
+      const next = [...bankRef.current, ...fresh].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+      bankRef.current = next;
+      setBankTxs(next);
+      return enqueue(async () => {
+        await backendRef.current.setMeta(BANK_KEY, JSON.stringify(next));
+        return { added: fresh.length, skipped: incoming.length - fresh.length };
+      });
+    },
+    [enqueue],
+  );
+
+  const linkBankTx = useCallback(
+    (txId: string, invoiceId: string | null) => {
+      const next = bankRef.current.map((t) =>
+        t.id === txId ? { ...t, matchedInvoiceId: invoiceId ?? undefined } : t,
+      );
+      bankRef.current = next;
+      setBankTxs(next);
+      return enqueue(async () => {
+        await backendRef.current.setMeta(BANK_KEY, JSON.stringify(next));
+      }).then(async () => {
+        if (!invoiceId) return;
+        const inv = dataRef.current.invoices.find((i) => i.id === invoiceId);
+        if (!inv || inv.status === 'paid') return;
+        const invLines = dataRef.current.lines.filter((l) => l.invoiceId === invoiceId);
+        await saveInvoice({ ...inv, status: 'paid', paymentMethod: inv.paymentMethod || 'Bank transfer' }, invLines);
+      });
+    },
+    [enqueue, saveInvoice],
+  );
+
   const retryStorage = useCallback(
     () =>
       enqueue(async () => {
@@ -271,6 +384,9 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
             await b.saveInvoice(inv, cur.lines.filter((l) => l.invoiceId === inv.id));
           }
           await b.setMeta('samplesSeeded', '1');
+          await b.setMeta(REVIEWS_KEY, JSON.stringify(reviewsRef.current));
+          await b.setMeta(CLAIMS_KEY, JSON.stringify(claimsRef.current));
+          await b.setMeta(BANK_KEY, JSON.stringify(bankRef.current));
           backendRef.current = b;
           const loaded = sortData(await b.loadAll());
           update(() => loaded);
@@ -290,7 +406,14 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
     () => ({
       ready,
       data,
+      reviews,
+      paymentClaims,
+      bankTxs,
       storageError,
+      saveReview,
+      claimPayment,
+      importBankTxs,
+      linkBankTx,
       retryStorage,
       dismissStorageError,
       createInvoice,
@@ -304,7 +427,14 @@ export function StoreProvider(props: { children: React.ReactNode }): JSX.Element
     [
       ready,
       data,
+      reviews,
+      paymentClaims,
+      bankTxs,
       storageError,
+      saveReview,
+      claimPayment,
+      importBankTxs,
+      linkBankTx,
       retryStorage,
       dismissStorageError,
       createInvoice,

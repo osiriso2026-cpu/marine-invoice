@@ -27,11 +27,18 @@ type FormState = {
   defaultTaxRate: string;
   defaultMarkupPct: string;
   paymentTerms: string;
+  zelleHandle: string;
+  stripePaymentUrl: string;
+  googleReviewUrl: string;
+  yelpReviewUrl: string;
+  facebookReviewUrl: string;
+  nextdoorReviewUrl: string;
 };
 
 type Errors = Partial<Record<keyof FormState, string>>;
 
 const NUMERIC: (keyof FormState)[] = ['defaultHourlyRate', 'defaultTaxRate', 'defaultMarkupPct'];
+const URL_FIELDS: (keyof FormState)[] = ['stripePaymentUrl', 'googleReviewUrl', 'yelpReviewUrl', 'facebookReviewUrl', 'nextdoorReviewUrl'];
 
 function numToText(n: number): string {
   return Number.isFinite(n) ? String(n) : '';
@@ -48,6 +55,12 @@ function toForm(s: Settings): FormState {
     defaultTaxRate: numToText(s.defaultTaxRate),
     defaultMarkupPct: numToText(s.defaultMarkupPct),
     paymentTerms: s.paymentTerms ?? '',
+    zelleHandle: s.zelleHandle ?? '',
+    stripePaymentUrl: s.stripePaymentUrl ?? '',
+    googleReviewUrl: s.googleReviewUrl ?? '',
+    yelpReviewUrl: s.yelpReviewUrl ?? '',
+    facebookReviewUrl: s.facebookReviewUrl ?? '',
+    nextdoorReviewUrl: s.nextdoorReviewUrl ?? '',
   };
 }
 
@@ -72,6 +85,10 @@ function validateField(key: keyof FormState, form: FormState): string | undefine
   if (key === 'email') {
     const v = form.email.trim();
     if (v && !/^\S+@\S+\.\S+$/.test(v)) return 'Enter an email like name@example.com.';
+  }
+  if (URL_FIELDS.includes(key)) {
+    const v = form[key].trim();
+    if (v && !/^https?:\/\/\S+$/.test(v)) return 'Enter a full link starting with https://';
   }
   return undefined;
 }
@@ -155,6 +172,12 @@ export default function SettingsScreen(): JSX.Element {
       defaultTaxRate: round2(parseNum(form.defaultTaxRate) ?? 0),
       defaultMarkupPct: round2(parseNum(form.defaultMarkupPct) ?? 0),
       paymentTerms: form.paymentTerms.trim(),
+      zelleHandle: form.zelleHandle.trim(),
+      stripePaymentUrl: form.stripePaymentUrl.trim(),
+      googleReviewUrl: form.googleReviewUrl.trim(),
+      yelpReviewUrl: form.yelpReviewUrl.trim(),
+      facebookReviewUrl: form.facebookReviewUrl.trim(),
+      nextdoorReviewUrl: form.nextdoorReviewUrl.trim(),
     };
     setSaving(true);
     try {
@@ -327,6 +350,54 @@ export default function SettingsScreen(): JSX.Element {
             {renderField('paymentTerms', 'Payment terms', {
               placeholder: 'Net 15. Payment due within 15 days of issue.',
               multiline: true,
+            })}
+          </View>
+
+          <View style={base.card}>
+            <Text style={s.sectionTitle} accessibilityRole="header">
+              Payments
+            </Text>
+            <Text style={s.sectionHint}>
+              Shown on the customer payment page. Zelle is the zero-fee option; add a Stripe Payment Link with ACH
+              enabled for larger jobs.
+            </Text>
+            {renderField('zelleHandle', 'Zelle handle', {
+              placeholder: 'info@mobilemarinedoc.com',
+              keyboardType: 'email-address',
+              autoCapitalize: 'none',
+              helper: 'The email or phone registered with Zelle on your business bank account.',
+            })}
+            {renderField('stripePaymentUrl', 'Stripe Payment Link (ACH)', {
+              placeholder: 'https://buy.stripe.com/…',
+              keyboardType: 'default',
+              autoCapitalize: 'none',
+              helper: 'Create one free at stripe.com → Payment Links. Leave blank to hide this option.',
+            })}
+          </View>
+
+          <View style={base.card}>
+            <Text style={s.sectionTitle} accessibilityRole="header">
+              Review links
+            </Text>
+            <Text style={s.sectionHint}>
+              After paying, happy customers get one-tap buttons for each link you add here. Blank ones are hidden.
+            </Text>
+            {renderField('googleReviewUrl', 'Google review link', {
+              placeholder: 'https://g.page/r/…/review',
+              autoCapitalize: 'none',
+            })}
+            {renderField('yelpReviewUrl', 'Yelp review link', {
+              placeholder: 'https://www.yelp.com/writeareview/biz/…',
+              autoCapitalize: 'none',
+              helper: 'Claim your free listing at biz.yelp.com first.',
+            })}
+            {renderField('facebookReviewUrl', 'Facebook reviews link', {
+              placeholder: 'https://www.facebook.com/…/reviews',
+              autoCapitalize: 'none',
+            })}
+            {renderField('nextdoorReviewUrl', 'Nextdoor recommend link', {
+              placeholder: 'https://nextdoor.com/pages/…/recommend/',
+              autoCapitalize: 'none',
             })}
           </View>
 

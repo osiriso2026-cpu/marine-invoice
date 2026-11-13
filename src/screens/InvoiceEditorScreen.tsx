@@ -521,6 +521,8 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
   const dueWarn = !issueErr && !dueFormatErr && validDate(inv.issueDate) && validDate(inv.dueDate) && inv.dueDate < inv.issueDate
     ? 'Due date is before the issue date' : '';
   const methods = PAYMENT_METHODS.includes(inv.paymentMethod) || !inv.paymentMethod ? PAYMENT_METHODS : [...PAYMENT_METHODS, inv.paymentMethod];
+  const claim = inv.status !== 'paid' ? store.paymentClaims[inv.id] : undefined;
+  const custReview = store.reviews.find((r) => r.invoiceId === inv.id);
 
   const sectionTitle = { fontSize: tokens.fontSize.lg, fontWeight: tokens.fontWeight.bold, color: c.ink, lineHeight: tokens.lineHeight.lg } as const;
   const gap = { marginTop: tokens.space[3] };
@@ -557,6 +559,37 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
           contentContainerStyle={{ padding: tokens.space[4], paddingBottom: tokens.space[6], gap: tokens.space[4] }}
           keyboardShouldPersistTaps="handled"
         >
+          {claim ? (
+            <View style={[s.card, { borderColor: c.warning }]} accessibilityLiveRegion="polite">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2] }}>
+                <Feather name="clock" size={20} color={c.warning} />
+                <Text style={[s.body, { fontWeight: tokens.fontWeight.bold, flex: 1 }]}>
+                  Customer says they sent a {claim.method} payment
+                </Text>
+              </View>
+              <Text style={[s.muted, { marginTop: tokens.space[1] }]}>
+                Marked sent {new Date(claim.claimedAt).toLocaleDateString()}. Check your bank, then set the status to Paid below.
+              </Text>
+            </View>
+          ) : null}
+
+          {custReview ? (
+            <View style={[s.card, custReview.isPrivate && { borderColor: c.warning }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2] }}>
+                <Feather name={custReview.isPrivate ? 'alert-triangle' : 'star'} size={20} color={custReview.isPrivate ? c.warning : c.accent} />
+                <Text style={[s.body, { fontWeight: tokens.fontWeight.bold, flex: 1 }]}>
+                  {custReview.isPrivate ? 'Private customer feedback' : 'Customer review'} · {custReview.rating}/5
+                </Text>
+              </View>
+              <Text style={[s.body, { marginTop: tokens.space[2] }]}>{custReview.text}</Text>
+              {custReview.isPrivate ? (
+                <Text style={[s.muted, { marginTop: tokens.space[1] }]}>
+                  Only you can see this. Reach out to the client before it becomes a public review.
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           {/* Client & vessel */}
           <View style={s.card}>
             <Text style={sectionTitle} accessibilityRole="header">Client and vessel</Text>
@@ -710,6 +743,12 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
               <Text style={s.muted}>Total due</Text>
               <TickMoney value={totals.total} style={[s.money, { fontSize: tokens.fontSize.xl, lineHeight: tokens.lineHeight.xl }]} />
             </View>
+            <Btn
+              label="Customer page"
+              icon="credit-card"
+              variant="secondary"
+              onPress={() => { void flush(); navigation.navigate('CustomerPortal', { invoiceId: inv.id }); }}
+            />
             <Btn label={SHARE_LABEL} icon="share" variant="primary" onPress={onShare} busy={sharing} />
           </View>
         </View>

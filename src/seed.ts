@@ -281,13 +281,19 @@ export const SEED_CATALOG: CatalogItem[] = [
 ];
 
 export const DEFAULT_SETTINGS: Settings = {
-  businessName: 'My Marine Fiberglass',
-  address: '',
-  phone: '',
-  email: '',
+  businessName: 'Mobile Marine Doc',
+  address: 'Key West & Lower Keys, FL',
+  phone: '(305) 767-3770',
+  email: 'info@mobilemarinedoc.com',
   licenseNo: '',
   defaultHourlyRate: 85,
   defaultTaxRate: 0,
   defaultMarkupPct: 0,
   paymentTerms: 'Due within 30 days of invoice date',
+  zelleHandle: 'info@mobilemarinedoc.com',
+  stripePaymentUrl: '',
+  googleReviewUrl: 'https://g.page/r/CRHKoiuFnQhMEBM/review',
+  yelpReviewUrl: '',
+  facebookReviewUrl: '',
+  nextdoorReviewUrl: '',
 };

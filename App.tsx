@@ -2,7 +2,7 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme, LinkingOptions } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
@@ -11,10 +11,12 @@ import type { RootStackParams } from './src/types';
 import { StoreProvider } from './src/store';
 import InvoicesScreen from './src/screens/InvoicesScreen';
 import InvoiceEditorScreen from './src/screens/InvoiceEditorScreen';
+import CustomerPortalScreen from './src/screens/CustomerPortalScreen';
 import CatalogScreen from './src/screens/CatalogScreen';
+import BankingScreen from './src/screens/BankingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 
-type TabParams = { Invoices: undefined; Catalog: undefined; Settings: undefined };
+type TabParams = { Invoices: undefined; Catalog: undefined; Banking: undefined; Settings: undefined };
 
 const Tab = createBottomTabNavigator<TabParams>();
 const Stack = createNativeStackNavigator<RootStackParams>();
@@ -22,6 +24,7 @@ const Stack = createNativeStackNavigator<RootStackParams>();
 const TAB_ICONS: Record<keyof TabParams, React.ComponentProps<typeof Feather>['name']> = {
   Invoices: 'file-text',
   Catalog: 'package',
+  Banking: 'dollar-sign',
   Settings: 'settings',
 };
 
@@ -55,6 +58,7 @@ function Tabs(): JSX.Element {
     >
       <Tab.Screen name="Invoices" component={InvoicesScreen} />
       <Tab.Screen name="Catalog" component={CatalogScreen} />
+      <Tab.Screen name="Banking" component={BankingScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -78,6 +82,11 @@ function Root(): JSX.Element {
         component={InvoiceEditorScreen as React.ComponentType<any>}
         options={{ title: 'Invoice', headerBackTitle: 'Invoices' }}
       />
+      <Stack.Screen
+        name="CustomerPortal"
+        component={CustomerPortalScreen as React.ComponentType<any>}
+        options={{ headerShown: false, title: 'Invoice & Payment' }}
+      />
     </Stack.Navigator>
   );
 }
@@ -86,6 +95,17 @@ function Themed(): JSX.Element {
   const c = useColors();
   const isDark = c.bg === '#0C171C';
   const base = isDark ? DarkTheme : DefaultTheme;
+  // On the web, /pay/<invoiceId> opens the read-only customer payment page directly.
+  const linking: LinkingOptions<RootStackParams> = {
+    prefixes: [],
+    config: {
+      screens: {
+        Tabs: '',
+        InvoiceEditor: 'edit/:invoiceId',
+        CustomerPortal: 'pay/:invoiceId',
+      },
+    },
+  };
   // One text family everywhere: on the web the navigation chrome uses the same system stack as the app's text.
   const fonts =
     Platform.OS === 'web'
@@ -110,7 +130,7 @@ function Themed(): JSX.Element {
     },
   };
   return (
-    <NavigationContainer theme={theme}>
+    <NavigationContainer theme={theme} linking={linking}>
       <StatusBar style="auto" />
       <Root />
     </NavigationContainer>
