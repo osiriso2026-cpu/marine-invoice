@@ -4,10 +4,10 @@ import {
   ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useStore } from '../store';
 import { computeTotals, lineTotal, money } from '../calc';
@@ -51,6 +52,49 @@ function lightHaptic() {
     if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   } catch {
     /* haptics unavailable */
+  }
+}
+
+function getPortalUrl(portalBaseUrl: string, invoiceId: string): string | null {
+  const configured = portalBaseUrl.trim().replace(/\/+$/, '');
+  if (configured) return `${configured}/pay/${invoiceId}`;
+  if (Platform.OS === 'web') {
+    const loc = (globalThis as { location?: { origin?: string } }).location;
+    if (loc?.origin) return `${loc.origin.replace(/\/+$/, '')}/pay/${invoiceId}`;
+  }
+  return null;
+}
+
+function phoneFromContact(contact: string): string {
+  const trimmed = contact.trim();
+  if (!trimmed || trimmed.includes('@')) return '';
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length < 7) return '';
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return trimmed.startsWith('+') ? `+${digits}` : digits;
+}
+
+function buildSmsUrl(phone: string, body: string): string {
+  const encoded = encodeURIComponent(body);
+  if (Platform.OS === 'ios') return phone ? `sms:${phone}&body=${encoded}` : `sms:&body=${encoded}`;
+  if (Platform.OS === 'android') return phone ? `sms:${phone}?body=${encoded}` : `sms:?body=${encoded}`;
+  return phone ? `sms:${phone}?&body=${encoded}` : `sms:?&body=${encoded}`;
+}
+
+function buildPaymentSmsText(businessName: string, inv: Invoice, total: number, url: string): string {
+  const who = inv.clientName.trim();
+  const biz = businessName.trim() || 'Mobile Marine Doc';
+  const greet = who ? `Hi ${who}, ` : 'Hi, ';
+  return `${greet}here is your ${biz} invoice ${inv.number} ($${money(total)}). View & pay with $0 fee: ${url}`;
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await Clipboard.setStringAsync(text);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -443,6 +487,36 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
     }
   };
 
+  const onTextLink = async () => {
+    if (!inv) return;
+    await flush();
+    const url = getPortalUrl(store.data.settings.portalBaseUrl, inv.id);
+    if (!url) {
+      showToast('Add your Customer portal web URL in Settings → Payments first.');
+      return;
+    }
+    const currentTotals = computeTotals(inv, lines);
+    const msg = buildPaymentSmsText(store.data.settings.businessName, inv, currentTotals.total, url);
+    const copied = await copyToClipboard(msg);
+    const phone = phoneFromContact(inv.contact);
+    const smsUrl = buildSmsUrl(phone, msg);
+
+    const ua = (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ?? '';
+    const isDesktopWeb = Platform.OS === 'web' && !/iPhone|iPad|iPod|Android|Macintosh/i.test(ua);
+
+    if (isDesktopWeb) {
+      showToast(copied ? 'Payment text & link copied! Paste into Messages or email.' : url);
+      return;
+    }
+
+    try {
+      await Linking.openURL(smsUrl);
+      if (copied) showToast('Payment text also copied to clipboard.');
+    } catch {
+      showToast(copied ? 'Payment text & link copied to clipboard.' : url);
+    }
+  };
+
   const onDelete = () => {
     if (!inv) return;
     setConfirmingDelete(true);
@@ -738,11 +812,17 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
               <Btn label="Retry" variant="tertiary" onPress={onShare} />
             </View>
           ) : null}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[3] }}>
-            <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2], flexWrap: 'wrap' }}>
+            <View style={{ flex: 1, minWidth: 110 }}>
               <Text style={s.muted}>Total due</Text>
               <TickMoney value={totals.total} style={[s.money, { fontSize: tokens.fontSize.xl, lineHeight: tokens.lineHeight.xl }]} />
             </View>
+            <Btn
+              label="Text link"
+              icon="message-square"
+              variant="secondary"
+              onPress={() => { void onTextLink(); }}
+            />
             <Btn
               label="Customer page"
               icon="credit-card"

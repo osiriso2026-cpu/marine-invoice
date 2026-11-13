@@ -51,6 +51,7 @@ const EMPTY_SETTINGS: Settings = {
   defaultTaxRate: 0,
   defaultMarkupPct: 0,
   paymentTerms: '',
+  portalBaseUrl: '',
   zelleHandle: '',
   stripePaymentUrl: '',
   googleReviewUrl: '',

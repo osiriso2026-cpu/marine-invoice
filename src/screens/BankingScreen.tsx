@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useStore } from '../store';
 import { money } from '../calc';
-import { monthLabel, monthlySummaries, parseBankCsv, suggestMatches } from '../bank';
+import { availableBankYears, buildAccountingCsv, monthLabel, monthlySummaries, parseBankCsv, suggestMatches } from '../bank';
 import { makeStyles, tokens, useColors } from '../theme';
 import { Button, EmptyState } from '../ui';
 import type { BankTx } from '../types';
@@ -26,6 +27,7 @@ export default function BankingScreen(): JSX.Element {
   const [toast, setToast] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [showAllTx, setShowAllTx] = useState(false);
+  const [exportYear, setExportYear] = useState<string>('all');
 
   const { bankTxs } = store;
   const invoiceByNumber = useMemo(() => {
@@ -39,6 +41,8 @@ export default function BankingScreen(): JSX.Element {
     [bankTxs, store.data.invoices, store.data.lines],
   );
   const months = useMemo(() => monthlySummaries(bankTxs), [bankTxs]);
+  const years = useMemo(() => availableBankYears(bankTxs), [bankTxs]);
+  const activeYear = exportYear !== 'all' && years.includes(exportYear) ? exportYear : undefined;
   const txsShown = showAllTx ? bankTxs : bankTxs.slice(0, RECENT_LIMIT);
 
   const showToast = (msg: string) => {
@@ -91,6 +95,44 @@ export default function BankingScreen(): JSX.Element {
   const unlink = async (tx: BankTx) => {
     await store.linkBankTx(tx.id, null);
     showToast('Deposit unlinked. The invoice status was not changed.');
+  };
+
+  const exportAccounting = async () => {
+    const csv = buildAccountingCsv(bankTxs, store.data.invoices, activeYear);
+    const label = activeYear ?? 'all-years';
+    const filename = `mobile-marine-doc-banking-${label}.csv`;
+    const rowCount = activeYear
+      ? bankTxs.filter((t) => t.date.startsWith(`${activeYear}-`)).length
+      : bankTxs.length;
+
+    const g = globalThis as {
+      document?: { createElement(tag: string): any; body: { appendChild(n: unknown): void } };
+      Blob?: new (parts: string[], opts: { type: string }) => unknown;
+      URL?: { createObjectURL(b: unknown): string; revokeObjectURL(u: string): void };
+    };
+
+    if (Platform.OS === 'web' && g.document && g.Blob && g.URL) {
+      const blob = new g.Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = g.URL.createObjectURL(blob);
+      const a = g.document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      g.document.body.appendChild(a);
+      a.click();
+      a.remove();
+      const urlApi = g.URL;
+      setTimeout(() => urlApi.revokeObjectURL(url), 60000);
+      showToast(`Downloaded ${filename} (${rowCount} transaction${rowCount === 1 ? '' : 's'}).`);
+      return;
+    }
+
+    try {
+      await Clipboard.setStringAsync(csv);
+      showToast(`Copied ${rowCount}-row accountant CSV to clipboard.`);
+    } catch {
+      showToast("Couldn't export CSV on this device.");
+    }
   };
 
   const sectionTitle = {
@@ -195,7 +237,7 @@ export default function BankingScreen(): JSX.Element {
           </View>
         ) : null}
 
-        {/* Monthly statement */}
+        {/* Monthly statement + Accountant export */}
         {months.length > 0 ? (
           <View style={s.card}>
             <Text style={sectionTitle} accessibilityRole="header">
@@ -223,6 +265,39 @@ export default function BankingScreen(): JSX.Element {
                   <Text style={[s.money, { flex: 1, textAlign: 'right', fontSize: tokens.fontSize.sm }]}>{money(mo.net)}</Text>
                 </View>
               ))}
+            </View>
+
+            <View style={{ marginTop: tokens.space[3], paddingTop: tokens.space[3], borderTopWidth: 1, borderTopColor: c.line, gap: tokens.space[2] }}>
+              {years.length > 1 ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space[2] }}>
+                  {['all', ...years].map((yr) => {
+                    const active = (activeYear ?? 'all') === yr;
+                    return (
+                      <Pressable
+                        key={yr}
+                        accessibilityRole="button"
+                        accessibilityLabel={yr === 'all' ? 'All years' : `Year ${yr}`}
+                        accessibilityState={{ selected: active }}
+                        onPress={() => setExportYear(yr)}
+                        style={({ pressed }) => [s.chip, active && s.chipActive, pressed && s.btnPressed]}
+                      >
+                        <Text style={[s.btnText, { fontSize: tokens.fontSize.sm }, active && s.btnTextOnAccent]}>
+                          {yr === 'all' ? 'All years' : yr}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+              <Button
+                variant="secondary"
+                icon="download"
+                label={activeYear ? `Export ${activeYear} Schedule C CSV` : 'Export accountant CSV'}
+                onPress={() => void exportAccounting()}
+              />
+              <Text style={[s.muted, { fontSize: tokens.fontSize.xs }]}>
+                Includes date, income/expense columns, matched invoice # and client for Schedule C or your bookkeeper.
+              </Text>
             </View>
           </View>
         ) : null}

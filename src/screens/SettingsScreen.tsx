@@ -27,6 +27,7 @@ type FormState = {
   defaultTaxRate: string;
   defaultMarkupPct: string;
   paymentTerms: string;
+  portalBaseUrl: string;
   zelleHandle: string;
   stripePaymentUrl: string;
   googleReviewUrl: string;
@@ -38,7 +39,7 @@ type FormState = {
 type Errors = Partial<Record<keyof FormState, string>>;
 
 const NUMERIC: (keyof FormState)[] = ['defaultHourlyRate', 'defaultTaxRate', 'defaultMarkupPct'];
-const URL_FIELDS: (keyof FormState)[] = ['stripePaymentUrl', 'googleReviewUrl', 'yelpReviewUrl', 'facebookReviewUrl', 'nextdoorReviewUrl'];
+const URL_FIELDS: (keyof FormState)[] = ['portalBaseUrl', 'stripePaymentUrl', 'googleReviewUrl', 'yelpReviewUrl', 'facebookReviewUrl', 'nextdoorReviewUrl'];
 
 function numToText(n: number): string {
   return Number.isFinite(n) ? String(n) : '';
@@ -55,6 +56,7 @@ function toForm(s: Settings): FormState {
     defaultTaxRate: numToText(s.defaultTaxRate),
     defaultMarkupPct: numToText(s.defaultMarkupPct),
     paymentTerms: s.paymentTerms ?? '',
+    portalBaseUrl: s.portalBaseUrl ?? '',
     zelleHandle: s.zelleHandle ?? '',
     stripePaymentUrl: s.stripePaymentUrl ?? '',
     googleReviewUrl: s.googleReviewUrl ?? '',
@@ -172,6 +174,7 @@ export default function SettingsScreen(): JSX.Element {
       defaultTaxRate: round2(parseNum(form.defaultTaxRate) ?? 0),
       defaultMarkupPct: round2(parseNum(form.defaultMarkupPct) ?? 0),
       paymentTerms: form.paymentTerms.trim(),
+      portalBaseUrl: form.portalBaseUrl.trim().replace(/\/+$/, ''),
       zelleHandle: form.zelleHandle.trim(),
       stripePaymentUrl: form.stripePaymentUrl.trim(),
       googleReviewUrl: form.googleReviewUrl.trim(),
@@ -361,6 +364,12 @@ export default function SettingsScreen(): JSX.Element {
               Shown on the customer payment page. Zelle is the zero-fee option; add a Stripe Payment Link with ACH
               enabled for larger jobs.
             </Text>
+            {renderField('portalBaseUrl', 'Customer portal web URL', {
+              placeholder: 'https://pay.mobilemarinedoc.com',
+              keyboardType: 'default',
+              autoCapitalize: 'none',
+              helper: 'Base domain where your hosted customer portal lives (used by the "Text link" button).',
+            })}
             {renderField('zelleHandle', 'Zelle handle', {
               placeholder: 'info@mobilemarinedoc.com',
               keyboardType: 'email-address',

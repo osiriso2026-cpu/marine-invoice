@@ -188,19 +188,26 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
         ) : null}
 
         {/* Business header */}
-        <View style={[s.card, { backgroundColor: c.ink }]}>
-          <Text style={{ color: c.accent === '#0B6E8A' ? '#7FD4EA' : c.accent, fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.bold, letterSpacing: 1.2 }}>
+        <View style={[s.card, { backgroundColor: '#10252E', borderColor: '#10252E' }]}>
+          <Text style={{ color: '#7FD4EA', fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.bold, letterSpacing: 1.2 }}>
             OFFICIAL SERVICE INVOICE
           </Text>
-          <Text style={{ color: c.bg, fontSize: tokens.fontSize.xl, fontWeight: tokens.fontWeight.bold, marginTop: tokens.space[1] }}>
+          <Text style={{ color: '#FFFFFF', fontSize: tokens.fontSize.xl, fontWeight: tokens.fontWeight.bold, marginTop: tokens.space[1] }}>
             {settings.businessName || 'Mobile Marine Doc'}
           </Text>
-          <Text style={{ color: c.bg, opacity: 0.8, fontSize: tokens.fontSize.sm, marginTop: 2 }}>
+          <Text style={{ color: '#D3DDE1', fontSize: tokens.fontSize.sm, marginTop: 2 }}>
             {[settings.address, settings.phone].filter(Boolean).join(' · ')}
           </Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: tokens.space[4] }}>
-            <Text style={{ color: c.bg, opacity: 0.8, fontSize: tokens.fontSize.sm }}>{inv.number}</Text>
-            <Text style={{ color: c.bg, fontSize: tokens.fontSize.hero, fontWeight: tokens.fontWeight.bold, ...tokens.numeric }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: tokens.space[4], gap: tokens.space[3] }}>
+            <View>
+              <Text style={{ color: '#D3DDE1', fontSize: tokens.fontSize.sm, fontWeight: tokens.fontWeight.medium }}>{inv.number}</Text>
+              {inv.issueDate || inv.dueDate ? (
+                <Text style={{ color: '#93A8B1', fontSize: tokens.fontSize.xs, marginTop: 2 }}>
+                  {[inv.issueDate ? `Issued ${inv.issueDate}` : '', inv.dueDate ? `Due ${inv.dueDate}` : ''].filter(Boolean).join(' · ')}
+                </Text>
+              ) : null}
+            </View>
+            <Text style={{ color: '#FFFFFF', fontSize: tokens.fontSize.hero, fontWeight: tokens.fontWeight.bold, ...tokens.numeric }}>
               {money(totals.total)}
             </Text>
           </View>
@@ -209,7 +216,9 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
         {/* Prepared for + line items (read-only) */}
         <View style={s.card}>
           <Text style={[s.muted, { textTransform: 'uppercase', fontSize: tokens.fontSize.xs, letterSpacing: 1 }]}>Prepared for</Text>
-          <Text style={[s.body, { fontWeight: tokens.fontWeight.bold, fontSize: tokens.fontSize.lg }]}>{inv.clientName}</Text>
+          <Text style={[s.body, { fontWeight: tokens.fontWeight.bold, fontSize: tokens.fontSize.lg }]}>
+            {inv.clientName.trim() || 'Valued Customer'}
+          </Text>
           {boatLabel ? <Text style={s.muted}>{boatLabel}</Text> : null}
           {inv.repairDescription.trim() ? (
             <Text style={[s.body, { marginTop: tokens.space[2] }]}>{inv.repairDescription.trim()}</Text>
@@ -321,14 +330,7 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
             Write one review below — we copy it for you so you can paste it on each site in seconds.
           </Text>
 
-          {reviewSubmitted && rating <= 3 ? (
-            <View style={{ marginTop: tokens.space[3], padding: tokens.space[3], backgroundColor: c.accentSoft, borderRadius: tokens.radius.control }}>
-              <Text style={s.body}>
-                Thank you for your honest feedback. It goes straight to the owner so we can make it right — expect a call
-                from {settings.phone || 'us'} soon.
-              </Text>
-            </View>
-          ) : (
+          {!reviewSubmitted ? (
             <>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2], marginTop: tokens.space[3] }}>
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -370,64 +372,103 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
                 />
               </View>
 
-              {!showPublicFunnel ? (
-                <View style={{ marginTop: tokens.space[3] }}>
-                  <Button
-                    icon={rating >= 4 ? 'copy' : 'mail'}
-                    label={rating >= 4 ? 'Copy review & unlock post buttons' : 'Send private feedback to the owner'}
-                    disabled={!reviewText.trim()}
-                    onPress={() => void onSubmitReview()}
-                  />
-                </View>
-              ) : null}
+              <View style={{ marginTop: tokens.space[3] }}>
+                <Button
+                  icon={rating >= 4 ? (platforms.length > 0 ? 'copy' : 'check') : 'mail'}
+                  label={
+                    rating >= 4
+                      ? platforms.length > 0
+                        ? 'Copy review & unlock post buttons'
+                        : 'Save review'
+                      : 'Send private feedback to the owner'
+                  }
+                  disabled={!reviewText.trim()}
+                  onPress={() => void onSubmitReview()}
+                />
+              </View>
             </>
-          )}
-
-          {showPublicFunnel ? (
+          ) : rating <= 3 ? (
             <View style={{ marginTop: tokens.space[3], padding: tokens.space[3], backgroundColor: c.accentSoft, borderRadius: tokens.radius.control, gap: tokens.space[2] }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={[s.body, { fontWeight: tokens.fontWeight.bold }]}>
-                  {copiedReview ? '✓ Review copied to clipboard!' : 'Ready to paste'}
-                </Text>
-                <Text style={[s.muted, { fontSize: tokens.fontSize.xs }]}>
-                  Posted {posted.length} / {platforms.length}
-                </Text>
+                <Text style={[s.muted, { fontWeight: tokens.fontWeight.bold }]}>{rating} / 5 · Private feedback sent</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Edit feedback" onPress={() => setReviewSubmitted(false)} hitSlop={{ top: 8, bottom: 8 }}>
+                  <Text style={{ color: c.accent, fontSize: tokens.fontSize.sm, fontWeight: tokens.fontWeight.medium }}>Edit</Text>
+                </Pressable>
               </View>
-              <Text style={[s.muted, { fontSize: tokens.fontSize.sm }]}>
-                Tap each site — your review is copied automatically, so just tap Paste → Post:
+              <Text style={s.body}>
+                Thank you for your honest feedback. It goes straight to the owner so we can make it right — expect a call
+                from {settings.phone || 'us'} soon.
               </Text>
-              {platforms.map((p) => {
-                const done = posted.includes(p.id);
-                return (
-                  <Pressable
-                    key={p.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Paste your review on ${p.name}`}
-                    onPress={() => void onLaunchPlatform(p)}
-                    style={({ pressed }) => [
-                      {
-                        minHeight: tokens.hit,
-                        borderRadius: tokens.radius.control,
-                        backgroundColor: done ? c.success : c.accent,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        paddingHorizontal: tokens.space[4],
-                      },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={{ color: c.accentInk, fontWeight: tokens.fontWeight.bold, fontSize: tokens.fontSize.md }}>
-                      {done ? `✓ Opened ${p.name}` : `Paste on ${p.name}`}
-                    </Text>
-                    <Text style={{ color: c.accentInk, opacity: 0.85, fontSize: tokens.fontSize.xs }}>
-                      {done ? 'Done' : p.badge}
-                    </Text>
-                  </Pressable>
-                );
-              })}
             </View>
-          ) : null}
+          ) : (
+            <View style={{ marginTop: tokens.space[3], gap: tokens.space[3] }}>
+              <View style={{ padding: tokens.space[3], borderWidth: 1, borderColor: c.line, borderRadius: tokens.radius.control, gap: tokens.space[2] }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <FontAwesome key={star} name={star <= rating ? 'star' : 'star-o'} size={18} color={star <= rating ? '#E3A03A' : c.inkMuted} />
+                    ))}
+                    <Text style={[s.muted, { marginLeft: tokens.space[1] }]}>{rating} / 5</Text>
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Edit review" onPress={() => setReviewSubmitted(false)} hitSlop={{ top: 8, bottom: 8 }}>
+                    <Text style={{ color: c.accent, fontSize: tokens.fontSize.sm, fontWeight: tokens.fontWeight.medium }}>Edit</Text>
+                  </Pressable>
+                </View>
+                <Text style={s.body}>{reviewText}</Text>
+              </View>
+
+              {showPublicFunnel ? (
+                <View style={{ padding: tokens.space[3], backgroundColor: c.accentSoft, borderRadius: tokens.radius.control, gap: tokens.space[2] }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={[s.body, { fontWeight: tokens.fontWeight.bold }]}>
+                      {copiedReview ? '✓ Review copied to clipboard!' : 'Ready to paste'}
+                    </Text>
+                    <Text style={[s.muted, { fontSize: tokens.fontSize.xs }]}>
+                      Posted {posted.length} / {platforms.length}
+                    </Text>
+                  </View>
+                  <Text style={[s.muted, { fontSize: tokens.fontSize.sm }]}>
+                    Tap each site — your review is copied automatically, so just tap Paste → Post:
+                  </Text>
+                  {platforms.map((p) => {
+                    const done = posted.includes(p.id);
+                    return (
+                      <Pressable
+                        key={p.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Paste your review on ${p.name}`}
+                        onPress={() => void onLaunchPlatform(p)}
+                        style={({ pressed }) => [
+                          {
+                            minHeight: tokens.hit,
+                            borderRadius: tokens.radius.control,
+                            backgroundColor: done ? c.success : c.accent,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            paddingHorizontal: tokens.space[4],
+                          },
+                          pressed && { opacity: 0.8 },
+                        ]}
+                      >
+                        <Text style={{ color: c.accentInk, fontWeight: tokens.fontWeight.bold, fontSize: tokens.fontSize.md }}>
+                          {done ? `✓ Opened ${p.name}` : `Paste on ${p.name}`}
+                        </Text>
+                        <Text style={{ color: c.accentInk, opacity: 0.85, fontSize: tokens.fontSize.xs }}>
+                          {done ? 'Done' : p.badge}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={{ padding: tokens.space[3], backgroundColor: c.accentSoft, borderRadius: tokens.radius.control, flexDirection: 'row', alignItems: 'center', gap: tokens.space[2] }}>
+                  <Feather name="check-circle" size={20} color={c.success} />
+                  <Text style={[s.body, { flex: 1 }]}>Thank you! Your review has been saved.</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         <Text style={[s.muted, { textAlign: 'center', fontSize: tokens.fontSize.xs }]}>

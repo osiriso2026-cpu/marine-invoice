@@ -232,3 +232,52 @@ export function monthLabel(month: string): string {
   const idx = parseInt(m[2], 10) - 1;
   return `${MONTH_NAMES[idx] ?? m[2]} ${m[1]}`;
 }
+
+function csvCell(value: string | number): string {
+  const s = String(value ?? '');
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+export function availableBankYears(txs: BankTx[]): string[] {
+  const years = new Set<string>();
+  for (const t of txs) {
+    const m = /^(\d{4})-/.exec(t.date);
+    if (m) years.add(m[1]);
+  }
+  return [...years].sort((a, b) => (a < b ? 1 : -1));
+}
+
+/** Builds a chronological Schedule C / bookkeeper CSV ledger of imported transactions and matched invoices. */
+export function buildAccountingCsv(txs: BankTx[], invoices: Invoice[], year?: string): string {
+  const byId = new Map<string, Invoice>();
+  for (const inv of invoices) byId.set(inv.id, inv);
+
+  const filtered = txs
+    .filter((t) => !year || t.date.startsWith(`${year}-`))
+    .slice()
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.description.localeCompare(b.description)));
+
+  const header = ['Date', 'Type', 'Description', 'Account', 'Money In', 'Money Out', 'Net Amount', 'Matched Invoice', 'Client'];
+  const rows = [header.map(csvCell).join(',')];
+
+  for (const t of filtered) {
+    const inv = t.matchedInvoiceId ? byId.get(t.matchedInvoiceId) : undefined;
+    const isIncome = t.amount >= 0;
+    rows.push(
+      [
+        t.date,
+        isIncome ? 'Income' : 'Expense',
+        t.description,
+        t.account,
+        isIncome ? t.amount.toFixed(2) : '',
+        isIncome ? '' : Math.abs(t.amount).toFixed(2),
+        t.amount.toFixed(2),
+        inv ? inv.number : '',
+        inv ? inv.clientName : '',
+      ]
+        .map(csvCell)
+        .join(','),
+    );
+  }
+  return rows.join('\r\n');
+}

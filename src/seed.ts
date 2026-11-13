@@ -290,6 +290,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultTaxRate: 0,
   defaultMarkupPct: 0,
   paymentTerms: 'Due within 30 days of invoice date',
+  portalBaseUrl: '',
   zelleHandle: 'info@mobilemarinedoc.com',
   stripePaymentUrl: '',
   googleReviewUrl: 'https://g.page/r/CRHKoiuFnQhMEBM/review',

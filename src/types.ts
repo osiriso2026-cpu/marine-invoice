@@ -7,6 +7,8 @@ export interface Client { id: string; name: string; contact: string; email: stri
 export interface Settings {
   businessName: string; address: string; phone: string; email: string; licenseNo: string;
   defaultHourlyRate: number; defaultTaxRate: number; defaultMarkupPct: number; paymentTerms: string;
+  /** Public web base URL where customer links live, e.g. https://pay.mobilemarinedoc.com. */
+  portalBaseUrl: string;
   /** Email or phone registered with the bank's Zelle; shown as the zero-fee payment option. */
   zelleHandle: string;
   /** Stripe Payment Link for ACH bank transfers, e.g. https://buy.stripe.com/XXXX. */
