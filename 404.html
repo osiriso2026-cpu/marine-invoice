@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Mobile Marine Doc — Redirecting…</title>
+    <script>
+      (function () {
+        var l = window.location;
+        var repo = '/marine-invoice';
+        var base = l.pathname.indexOf(repo) === 0 ? repo : '';
+        var target = l.pathname + l.search;
+        l.replace(l.origin + base + '/?p=' + encodeURIComponent(target) + l.hash);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

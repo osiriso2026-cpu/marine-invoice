@@ -1,0 +1,23 @@
+{
+  "name": "Mobile Marine Doc — Invoices & Banking",
+  "short_name": "Marine Doc",
+  "description": "Mobile Marine Doc Invoicing, Relay Banking & Customer Payment Portal",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#10252E",
+  "theme_color": "#10252E",
+  "icons": [
+    {
+      "src": "./logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
