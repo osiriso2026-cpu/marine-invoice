@@ -16,6 +16,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useStore } from '../store';
 import { hasSupabaseConfig, SUPABASE_SETUP_SQL } from '../cloud';
+import { BrandLogo } from '../logo';
 import { makeStyles, tokens, useColors } from '../theme';
 import type { Settings } from '../types';
 
@@ -310,10 +311,14 @@ export default function SettingsScreen(): JSX.Element {
   return (
     <SafeAreaView style={base.screen} edges={['top']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={s.header}>
-          <Text style={base.title} accessibilityRole="header">
-            Settings
-          </Text>
+        <View style={[s.header, { flexDirection: 'row', alignItems: 'center', gap: t.space[3] }]}>
+          <BrandLogo size={42} />
+          <View style={{ flex: 1 }}>
+            <Text style={base.title} accessibilityRole="header">
+              Settings
+            </Text>
+            <Text style={base.muted}>Mobile Marine Doc · Business & Portal Setup</Text>
+          </View>
         </View>
 
         <ScrollView

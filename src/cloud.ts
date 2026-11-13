@@ -102,6 +102,17 @@ export function decodePortalSnapshot(raw?: string | null): PortalSnapshot | null
       } catch {
         token = m[1];
       }
+    } else {
+      const pm = /[?&]p=([^&#]+)/.exec(search);
+      if (pm) {
+        try {
+          const decodedP = decodeURIComponent(pm[1].replace(/\+/g, ' '));
+          const dm = /[?&]d=([^&#]+)/.exec(decodedP);
+          if (dm) token = decodeURIComponent(dm[1]);
+        } catch {
+          /* ignore malformed p parameter */
+        }
+      }
     }
   }
   if (!token) return null;
@@ -123,9 +134,15 @@ export function buildCustomerPortalUrl(inv: Invoice, lines: LineItem[], s: Setti
   let base = configured;
   if (!base && Platform.OS === 'web') {
     const loc = (globalThis as { location?: { origin?: string; pathname?: string } }).location;
-    if (loc?.origin) {
-      const pathPrefix = (loc.pathname || '').replace(/\/(edit|pay)\/.*$/, '').replace(/\/+$/, '');
+    if (loc?.origin && !(loc.pathname || '').includes('/wp-content/plugins/')) {
+      const pathPrefix = (loc.pathname || '')
+        .replace(/\/index\.html$/i, '')
+        .replace(/\/(edit|pay)\/.*$/, '')
+        .replace(/\/+$/, '');
       base = `${loc.origin.replace(/\/+$/, '')}${pathPrefix}`;
+    } else if (loc?.origin && (loc.pathname || '').includes('/wp-content/plugins/')) {
+      const wpRoot = (loc.pathname || '').split('/wp-content/plugins/')[0].replace(/\/+$/, '');
+      base = `${loc.origin.replace(/\/+$/, '')}${wpRoot}`;
     }
   }
   if (!base) {

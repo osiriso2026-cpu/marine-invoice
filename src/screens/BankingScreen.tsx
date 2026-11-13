@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useStore } from '../store';
 import { money } from '../calc';
+import { BrandLogo } from '../logo';
 import {
   accountSummaries,
   availableBankAccounts,
@@ -169,11 +170,23 @@ export default function BankingScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
-      <View style={{ paddingHorizontal: tokens.space[4], paddingTop: tokens.space[3], paddingBottom: tokens.space[2] }}>
-        <Text style={s.title} accessibilityRole="header">
-          Banking
-        </Text>
-        <Text style={s.muted}>Relay transactions, matched to your invoices.</Text>
+      <View
+        style={{
+          paddingHorizontal: tokens.space[4],
+          paddingTop: tokens.space[3],
+          paddingBottom: tokens.space[2],
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: tokens.space[3],
+        }}
+      >
+        <BrandLogo size={42} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.title} accessibilityRole="header">
+            Banking
+          </Text>
+          <Text style={s.muted}>Relay transactions, matched to your invoices.</Text>
+        </View>
       </View>
 
       <ScrollView

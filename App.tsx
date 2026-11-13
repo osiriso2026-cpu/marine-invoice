@@ -2,7 +2,14 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NavigationContainer, DefaultTheme, DarkTheme, LinkingOptions } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+  LinkingOptions,
+  getStateFromPath as defaultGetStateFromPath,
+  getPathFromState as defaultGetPathFromState,
+} from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
@@ -27,6 +34,41 @@ const TAB_ICONS: Record<keyof TabParams, React.ComponentProps<typeof Feather>['n
   Banking: 'dollar-sign',
   Settings: 'settings',
 };
+
+function getQueryParam(query: string, key: string): string | null {
+  for (const part of query.split('&')) {
+    const eq = part.indexOf('=');
+    const k = eq === -1 ? part : part.slice(0, eq);
+    try {
+      if (decodeURIComponent(k) === key) {
+        return eq === -1 ? '' : decodeURIComponent(part.slice(eq + 1).replace(/\+/g, ' '));
+      }
+    } catch {
+      /* ignore malformed encoding */
+    }
+  }
+  return null;
+}
+
+function extractTargetPath(rawPath: string): string {
+  const qIdx = rawPath.indexOf('?');
+  let target = rawPath;
+  if (qIdx !== -1) {
+    const p = getQueryParam(rawPath.slice(qIdx + 1), 'p');
+    if (p) target = p;
+  }
+  const tqIdx = target.indexOf('?');
+  const pathOnly = tqIdx === -1 ? target : target.slice(0, tqIdx);
+  const targetQuery = tqIdx === -1 ? '' : target.slice(tqIdx + 1);
+  let clean = (pathOnly || '/').replace(/\/+$/, '') || '/';
+  if (clean.startsWith('/marine-invoice')) {
+    clean = clean.slice('/marine-invoice'.length) || '/';
+  }
+  if (clean.endsWith('/app/index.html') || clean === '/index.html') {
+    clean = '/';
+  }
+  return targetQuery ? `${clean}?${targetQuery}` : clean;
+}
 
 function Tabs(): JSX.Element {
   const c = useColors();
@@ -95,35 +137,31 @@ function Themed(): JSX.Element {
   const c = useColors();
   const isDark = c.bg === '#0C171C';
   const base = isDark ? DarkTheme : DefaultTheme;
-  if (Platform.OS === 'web') {
-    const win = globalThis as {
-      location?: { search?: string; pathname?: string; hash?: string };
-      history?: { replaceState(data: unknown, unused: string, url?: string | null): void };
-    };
-    const search = win.location?.search || '';
-    const m = /[?&]p=([^&]+)/.exec(search);
-    if (m && win.history?.replaceState) {
-      try {
-        const restored = decodeURIComponent(m[1]);
-        win.history.replaceState(null, '', restored + (win.location?.hash || ''));
-      } catch {
-        /* ignore malformed redirect */
-      }
-    }
-  }
-  const webPrefix =
-    Platform.OS === 'web' && (globalThis as { location?: { pathname?: string } }).location?.pathname?.startsWith('/marine-invoice')
-      ? 'marine-invoice/'
-      : '';
-  // On the web, /pay/<invoiceId> opens the read-only customer payment page directly.
+  // Supports direct paths (/pay/<id>), GitHub Pages (/marine-invoice/?p=...), and WordPress iframe (index.html?p=...).
   const linking: LinkingOptions<RootStackParams> = {
     prefixes: [],
     config: {
       screens: {
-        Tabs: webPrefix,
-        InvoiceEditor: `${webPrefix}edit/:invoiceId`,
-        CustomerPortal: `${webPrefix}pay/:invoiceId`,
+        Tabs: '',
+        InvoiceEditor: 'edit/:invoiceId',
+        CustomerPortal: 'pay/:invoiceId',
       },
+    },
+    getStateFromPath(path, options) {
+      return defaultGetStateFromPath(extractTargetPath(path), options);
+    },
+    getPathFromState(state, options) {
+      const defaultPath = defaultGetPathFromState(state, options);
+      if (Platform.OS === 'web') {
+        const pathname = (globalThis as { location?: { pathname?: string } }).location?.pathname ?? '';
+        if (pathname.endsWith('/index.html')) {
+          return `${pathname}?p=${encodeURIComponent(defaultPath)}`;
+        }
+        if (pathname === '/marine-invoice' || pathname.startsWith('/marine-invoice/')) {
+          return `/marine-invoice${defaultPath === '/' ? '/' : defaultPath}`;
+        }
+      }
+      return defaultPath;
     },
   };
   // One text family everywhere: on the web the navigation chrome uses the same system stack as the app's text.
