@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useStore } from '../store';
 import { computeTotals, money } from '../calc';
+import { BrandLogo } from '../logo';
 import { makeStyles, tokens, useColors } from '../theme';
 import type { Invoice, InvoiceStatus, LineItem } from '../types';
 
@@ -267,9 +268,17 @@ export default function InvoicesScreen(): JSX.Element {
 
   const header = (
     <View>
-      <Text accessibilityRole="header" style={[s.title, local.title]}>
-        Invoices
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[3], marginBottom: tokens.space[3] }}>
+        <BrandLogo size={46} />
+        <View style={{ flex: 1 }}>
+          <Text accessibilityRole="header" style={s.title}>
+            {store.data.settings.businessName || 'Mobile Marine Doc'}
+          </Text>
+          <Text style={[s.muted, { fontSize: tokens.fontSize.xs }]}>
+            Fiberglass Repair & Marine Services · Invoices
+          </Text>
+        </View>
+      </View>
 
       {store.ready && store.storageError ? <StorageNotice onResult={showToast} /> : null}
 

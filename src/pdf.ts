@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import type { Invoice, LineItem, Settings } from './types';
 import { computeTotals, lineTotal, money } from './calc';
 import { buildCustomerPortalUrl } from './cloud';
+import { BRAND_LOGO_SVG } from './logo';
 
 const ACCENT = '#0B6E8A';
 const INK = '#10252E';
@@ -167,9 +168,14 @@ export function buildInvoiceHtml(inv: Invoice, lines: LineItem[], s: Settings): 
 <body>
   <div class="head">
     <div class="biz">
-      <h1>${esc(s.businessName || 'Marine repair')}</h1>
-      ${s.address ? `<p>${escMultiline(s.address)}</p>` : ''}
-      ${bizContact ? `<p>${bizContact}</p>` : ''}
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:52px;height:52px;flex-shrink:0;">${BRAND_LOGO_SVG.replace('width="120" height="120"', 'width="52" height="52"')}</div>
+        <div>
+          <h1>${esc(s.businessName || 'Marine repair')}</h1>
+          ${s.address ? `<p>${escMultiline(s.address)}</p>` : ''}
+          ${bizContact ? `<p>${bizContact}</p>` : ''}
+        </div>
+      </div>
     </div>
     <div class="meta">
       <div class="doc">INVOICE</div>

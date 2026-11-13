@@ -14,6 +14,7 @@ import {
   pushReviewToCloud,
 } from '../cloud';
 import { makeStyles, tokens, useColors } from '../theme';
+import { BrandLogo } from '../logo';
 import { Button } from '../ui';
 import type { EditorProps, Invoice, LineItem, Review, Settings } from '../types';
 
@@ -263,15 +264,20 @@ export default function CustomerPortalScreen({ route, navigation }: EditorProps)
 
         {/* Business header */}
         <View style={[s.card, { backgroundColor: '#10252E', borderColor: '#10252E' }]}>
-          <Text style={{ color: '#7FD4EA', fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.bold, letterSpacing: 1.2 }}>
-            OFFICIAL SERVICE INVOICE
-          </Text>
-          <Text style={{ color: '#FFFFFF', fontSize: tokens.fontSize.xl, fontWeight: tokens.fontWeight.bold, marginTop: tokens.space[1] }}>
-            {settings.businessName || 'Mobile Marine Doc'}
-          </Text>
-          <Text style={{ color: '#D3DDE1', fontSize: tokens.fontSize.sm, marginTop: 2 }}>
-            {[settings.address, settings.phone].filter(Boolean).join(' · ')}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[3] }}>
+            <BrandLogo size={54} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#7FD4EA', fontSize: tokens.fontSize.xs, fontWeight: tokens.fontWeight.bold, letterSpacing: 1.2 }}>
+                OFFICIAL SERVICE INVOICE
+              </Text>
+              <Text style={{ color: '#FFFFFF', fontSize: tokens.fontSize.xl, fontWeight: tokens.fontWeight.bold, marginTop: 2 }}>
+                {settings.businessName || 'Mobile Marine Doc'}
+              </Text>
+              <Text style={{ color: '#D3DDE1', fontSize: tokens.fontSize.sm, marginTop: 2 }}>
+                {[settings.address, settings.phone].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: tokens.space[4], gap: tokens.space[3] }}>
             <View>
               <Text style={{ color: '#D3DDE1', fontSize: tokens.fontSize.sm, fontWeight: tokens.fontWeight.medium }}>{inv.number}</Text>
