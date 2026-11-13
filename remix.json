@@ -1,0 +1,10 @@
+{
+  "kind": "MOBILE",
+  "template": "expo-app",
+  "build": {
+    "command": "npm run build",
+    "output": "dist"
+  },
+  "connect": [],
+  "secrets": {}
+}

@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "Marine Invoice",
+    "slug": "marine-invoice",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true
+  }
+}
