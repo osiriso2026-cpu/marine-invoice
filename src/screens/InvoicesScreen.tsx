@@ -405,7 +405,7 @@ export default function InvoicesScreen(): JSX.Element {
         </View>
         <Text style={s.emptyTitle}>No invoices yet</Text>
         <Text style={s.emptyText}>
-          Quote a repair with labor hours and catalog materials. Everything stays on this phone, even offline.
+          Quote a repair with labor hours and catalog materials. Everything stays on this device, even offline.
         </Text>
         {newButton('New invoice')}
       </View>

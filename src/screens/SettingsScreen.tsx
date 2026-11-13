@@ -334,7 +334,7 @@ export default function SettingsScreen(): JSX.Element {
             <View style={s.infoRow}>
               <Feather name="hard-drive" size={20} color={c.accent} />
               <Text style={s.infoText}>
-                Everything is stored on this phone: catalog, clients and invoices. It all works without a signal.
+                Everything is stored on this device: catalog, clients and invoices. It all works without a signal.
               </Text>
             </View>
           </View>
