@@ -533,7 +533,7 @@ export default function InvoiceEditorScreen({ route, navigation }: EditorProps):
           <IconBtn icon="chevron-left" label="Back to invoices" onPress={() => { void flush(); navigation.goBack(); }} color={c.ink} />
           <View style={{ flex: 1, paddingHorizontal: tokens.space[2] }}>
             <Text style={[s.body, { fontWeight: tokens.fontWeight.bold, fontSize: tokens.fontSize.lg }]} accessibilityRole="header">{inv.number}</Text>
-            <Text style={s.muted}>{saveState === 'saving' ? 'Saving…' : 'Saved on this phone'}</Text>
+            <Text style={s.muted}>{saveState === 'saving' ? 'Saving…' : 'Saved on this device'}</Text>
           </View>
           <IconBtn icon="trash-2" label="Delete invoice" onPress={onDelete} color={c.danger} />
         </View>
