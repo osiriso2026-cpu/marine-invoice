@@ -129,7 +129,7 @@ export function buildCustomerPortalUrl(inv: Invoice, lines: LineItem[], s: Setti
     }
   }
   if (!base) {
-    base = 'https://osiriso2026-cpu.github.io/marine-invoice';
+    base = 'https://pay.mobilemarinedoc.com';
   }
   const encoded = encodePortalSnapshot(inv, lines, s);
   return encoded ? `${base}/pay/${inv.id}?d=${encoded}` : `${base}/pay/${inv.id}`;

@@ -290,7 +290,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultTaxRate: 0,
   defaultMarkupPct: 0,
   paymentTerms: 'Due within 30 days of invoice date',
-  portalBaseUrl: 'https://osiriso2026-cpu.github.io/marine-invoice',
+  portalBaseUrl: 'https://pay.mobilemarinedoc.com',
   zelleHandle: 'info@mobilemarinedoc.com',
   stripePaymentUrl: '',
   relayBankName: 'Relay Financial (Thread Bank)',

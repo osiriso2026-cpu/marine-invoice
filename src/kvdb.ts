@@ -62,7 +62,10 @@ export function createKvBackend(persist: boolean): Backend {
       }
     }
     const mergedSettings: Settings = { ...DEFAULT_SETTINGS, ...(parsed?.settings ?? {}) };
-    if (!mergedSettings.portalBaseUrl) {
+    if (
+      !mergedSettings.portalBaseUrl ||
+      mergedSettings.portalBaseUrl === 'https://osiriso2026-cpu.github.io/marine-invoice'
+    ) {
       mergedSettings.portalBaseUrl = DEFAULT_SETTINGS.portalBaseUrl;
     }
     const next: KvState = parsed

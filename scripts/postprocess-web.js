@@ -54,4 +54,7 @@ fs.writeFileSync(path.join(distDir, '404.html'), notFoundHtml, 'utf8');
 // 4. Create .nojekyll so GitHub Pages serves the _expo/ directory
 fs.writeFileSync(path.join(distDir, '.nojekyll'), '', 'utf8');
 
+// 5. Write CNAME for custom domain https://pay.mobilemarinedoc.com
+fs.writeFileSync(path.join(distDir, 'CNAME'), 'pay.mobilemarinedoc.com\n', 'utf8');
+
 console.log('Post-processed web build in:', distDir);

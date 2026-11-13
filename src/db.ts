@@ -304,7 +304,12 @@ async function loadSettings(): Promise<Settings> {
   try {
     const parsed = JSON.parse(row.value) as Partial<Settings>;
     const merged: Settings = { ...DEFAULT_SETTINGS, ...parsed };
-    if (!merged.portalBaseUrl) merged.portalBaseUrl = DEFAULT_SETTINGS.portalBaseUrl;
+    if (
+      !merged.portalBaseUrl ||
+      merged.portalBaseUrl === 'https://osiriso2026-cpu.github.io/marine-invoice'
+    ) {
+      merged.portalBaseUrl = DEFAULT_SETTINGS.portalBaseUrl;
+    }
     return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
